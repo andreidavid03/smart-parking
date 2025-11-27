@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'screens/auth/login_screen.dart';
-import 'screens/home/home_screen.dart';
+import 'screens/home/user_home_screen.dart';
+import 'screens/home/admin_home_screen.dart';
 import 'screens/theme/app_theme.dart';
 
 class SmartParkingApp extends StatelessWidget {
@@ -14,7 +15,8 @@ class SmartParkingApp extends StatelessWidget {
       initialRoute: '/login',
       routes: {
         '/login': (_) => const LoginScreen(),
-        '/home': (_) => const HomeScreen(),
+        '/home/user': (_) => const UserHomeScreen(),
+        '/home/admin': (_) => const AdminHomeScreen(),
       },
     );
   }

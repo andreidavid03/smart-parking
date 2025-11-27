@@ -1,0 +1,72 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id                     String    @id @default(uuid())
+  email                  String    @unique
+  password               String
+  role                   String    @default("user")
+  emailVerified          Boolean   @default(false)
+  verificationToken      String?   @unique
+  resetPasswordToken     String?   @unique
+  resetPasswordExpires   DateTime?
+  carColor               String?
+  preferredSpot          String?   // A1-B10 or null
+  spotPreferenceType     String?   // 'specific', 'entrance', 'exit', 'shop', null
+  qrCode                 String?   @unique
+  createdAt              DateTime  @default(now())
+  updatedAt              DateTime  @default(now()) @updatedAt
+  
+  sessions               Session[]
+}
+
+model Spot {
+  id        String    @id @default(uuid())
+  name      String    @default("")
+  status    String    @default("available")
+  spotLat   Float?
+  spotLng   Float?
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @default(now()) @updatedAt
+  
+  sessions  Session[]
+}
+
+model Session {
+  id        String   @id @default(uuid())
+  userId    String
+  spotId    String
+  startTime DateTime @default(now())
+  endTime   DateTime?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @default(now()) @updatedAt
+
+  user      User     @relation(fields: [userId], references: [id])
+  spot      Spot     @relation(fields: [spotId], references: [id])
+}
+
+model ParkingConfig {
+  id              String   @id @default(uuid())
+  entranceLat     Float    @default(37.7749)
+  entranceLng     Float    @default(-122.4194)
+  exitLat         Float    @default(37.7750)
+  exitLng         Float    @default(-122.4195)
+  shopLat         Float    @default(37.7751)
+  shopLng         Float    @default(-122.4196)
+  
+  // Macheta Overlay Configuration
+  machetaTopLeftLat     Float?
+  machetaTopLeftLng     Float?
+  machetaBottomRightLat Float?
+  machetaBottomRightLng Float?
+  machetaOverlayUrl     String?
+
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @default(now()) @updatedAt
+}

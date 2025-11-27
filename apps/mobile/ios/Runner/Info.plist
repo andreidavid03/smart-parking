@@ -45,5 +45,11 @@
 	<true/>
 	<key>UIApplicationSupportsIndirectInputEvents</key>
 	<true/>
+	<key>NSFaceIDUsageDescription</key>
+	<string>Smart Parking needs Face ID to enable quick and secure login</string>
+	<key>NSLocationWhenInUseUsageDescription</key>
+	<string>Smart Parking needs your location to navigate you to your parking spot</string>
+	<key>NSLocationAlwaysAndWhenInUseUsageDescription</key>
+	<string>Smart Parking needs your location to navigate you to your parking spot</string>
 </dict>
 </plist>

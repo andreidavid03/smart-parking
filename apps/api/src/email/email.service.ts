@@ -1,6 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import * as nodemailer from 'nodemailer';
 import type { Transporter } from 'nodemailer';
+import * as os from 'os';
 
 @Injectable()
 export class EmailService {
@@ -16,8 +17,24 @@ export class EmailService {
     });
   }
 
+  private getLocalIpAddress(): string {
+    const interfaces = os.networkInterfaces();
+    for (const devName in interfaces) {
+      const iface = interfaces[devName];
+      if (iface) {
+        for (const alias of iface) {
+          if (alias.family === 'IPv4' && alias.address !== '127.0.0.1' && !alias.internal) {
+            return alias.address;
+          }
+        }
+      }
+    }
+    return 'localhost';
+  }
+
   async sendVerificationEmail(email: string, token: string) {
-    const verificationUrl = `http://localhost:3000/auth/verify-email?token=${token}`;
+    const host = this.getLocalIpAddress();
+    const verificationUrl = `http://${host}:3000/auth/verify-email?token=${token}`;
 
     await this.transporter.sendMail({
       from: process.env.EMAIL_USER,
@@ -58,7 +75,8 @@ export class EmailService {
   }
 
   async sendPasswordResetEmail(email: string, token: string) {
-    const resetUrl = `http://localhost:3000/auth/reset-password?token=${token}`;
+    const host = this.getLocalIpAddress();
+    const resetUrl = `http://${host}:3000/auth/reset-password?token=${token}`;
 
     await this.transporter.sendMail({
       from: process.env.EMAIL_USER,

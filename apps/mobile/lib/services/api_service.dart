@@ -3,12 +3,12 @@ import 'package:http/http.dart' as http;
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
 class ApiService {
-  static const String baseUrl = 'http://10.222.2.137:3000';
+  static const String baseUrl = 'http://192.168.1.166:3000';
   static const FlutterSecureStorage _storage = FlutterSecureStorage();
 
   static Future<String?> login(String email, String password) async {
     try {
-      print('Calling API: $baseUrl/auth/login');
+      print('🚀 Authenticating with API at: $baseUrl/auth/login');
       final response = await http.post(
         Uri.parse('$baseUrl/auth/login'),
         headers: {'Content-Type': 'application/json'},
@@ -294,6 +294,8 @@ class ApiService {
     required double exitLng,
     required double shopLat,
     required double shopLng,
+    double? parkingCostPerHour,
+    int? speedLimit,
   }) async {
     try {
       final response = await http.post(
@@ -306,6 +308,8 @@ class ApiService {
           'exitLng': exitLng,
           'shopLat': shopLat,
           'shopLng': shopLng,
+          if (parkingCostPerHour != null) 'parkingCostPerHour': parkingCostPerHour,
+          if (speedLimit != null) 'speedLimit': speedLimit,
         }),
       );
 

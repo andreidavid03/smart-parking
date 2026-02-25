@@ -28,7 +28,7 @@ model User {
 
 model Spot {
   id        String    @id @default(uuid())
-  name      String    @default("")
+  name      String    @unique @default("")
   status    String    @default("available")
   spotLat   Float?
   spotLng   Float?
@@ -60,6 +60,10 @@ model ParkingConfig {
   shopLat         Float    @default(37.7751)
   shopLng         Float    @default(-122.4196)
   
+  // New Configs
+  parkingCostPerHour Float @default(5.0)
+  speedLimit         Int   @default(10) // km/h
+
   // Macheta Overlay Configuration
   machetaTopLeftLat     Float?
   machetaTopLeftLng     Float?

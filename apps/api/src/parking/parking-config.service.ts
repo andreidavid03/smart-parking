@@ -32,6 +32,8 @@ export class ParkingConfigService {
     exitLng: number;
     shopLat: number;
     shopLng: number;
+    parkingCostPerHour?: number;
+    speedLimit?: number;
   }) {
     // Always update the first config (or create if doesn't exist)
     const existing = await this.prisma.parkingConfig.findFirst();

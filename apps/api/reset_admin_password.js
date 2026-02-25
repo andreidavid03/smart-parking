@@ -14,7 +14,7 @@ async function main() {
     where: { email: adminEmail },
     data: { 
       password: hashedPassword,
-      emailVerified: true,
+      emailVerified: true,  
       role: 'admin'
     },
   });

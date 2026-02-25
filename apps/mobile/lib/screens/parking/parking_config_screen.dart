@@ -19,12 +19,22 @@ class _ParkingConfigScreenState extends State<ParkingConfigScreen> {
   
   String _selectedMarker = 'entrance'; // 'entrance', 'exit', 'shop'
   
+  final TextEditingController _costController = TextEditingController();
+  final TextEditingController _speedLimitController = TextEditingController();
+
   final Set<Marker> _markers = {};
 
   @override
   void initState() {
     super.initState();
     _loadConfig();
+  }
+
+  @override
+  void dispose() {
+    _costController.dispose();
+    _speedLimitController.dispose();
+    super.dispose();
   }
 
   Future<void> _loadConfig() async {
@@ -48,6 +58,8 @@ class _ParkingConfigScreenState extends State<ParkingConfigScreen> {
           config['shopLat'] as double,
           config['shopLng'] as double,
         );
+        _costController.text = (config['parkingCostPerHour'] ?? 5.0).toString();
+        _speedLimitController.text = (config['speedLimit'] ?? 10).toString();
         _isLoading = false;
       });
       _updateMarkers();
@@ -136,6 +148,8 @@ class _ParkingConfigScreenState extends State<ParkingConfigScreen> {
       exitLng: _exitPos.longitude,
       shopLat: _shopPos.latitude,
       shopLng: _shopPos.longitude,
+      parkingCostPerHour: double.tryParse(_costController.text),
+      speedLimit: int.tryParse(_speedLimitController.text),
     );
 
     if (mounted) {
@@ -280,6 +294,34 @@ class _ParkingConfigScreenState extends State<ParkingConfigScreen> {
                   ),
                   child: Column(
                     children: [
+                      Row(
+                        children: [
+                          Expanded(
+                            child: TextField(
+                              controller: _costController,
+                              keyboardType: TextInputType.numberWithOptions(decimal: true),
+                              decoration: const InputDecoration(
+                                labelText: 'Cost per Hour (RON)',
+                                border: OutlineInputBorder(),
+                                prefixIcon: Icon(Icons.attach_money),
+                              ),
+                            ),
+                          ),
+                          const SizedBox(width: 16),
+                          Expanded(
+                            child: TextField(
+                              controller: _speedLimitController,
+                              keyboardType: TextInputType.number,
+                              decoration: const InputDecoration(
+                                labelText: 'Speed Limit (km/h)',
+                                border: OutlineInputBorder(),
+                                prefixIcon: Icon(Icons.speed),
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 16),
                       _buildInfoRow('🚪 Entrance', _entrancePos, Colors.blue),
                       const SizedBox(height: 8),
                       _buildInfoRow('🚗 Exit', _exitPos, Colors.orange),

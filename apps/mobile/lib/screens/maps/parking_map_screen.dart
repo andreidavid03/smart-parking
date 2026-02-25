@@ -27,10 +27,17 @@ class _ParkingMapScreenState extends State<ParkingMapScreen> {
     try {
       final spots = await ApiService.getSpots();
       final config = await ApiService.getParkingConfig();
+
+      // Deduplicate spots by name to fix "doubled spots" issue
+      final uniqueSpots = <String, Map<String, dynamic>>{};
+      for (var spot in spots) {
+        uniqueSpots[spot['name']] = spot;
+      }
+      final dedupedSpots = uniqueSpots.values.toList();
       
       if (mounted) {
         setState(() {
-          _spots = spots;
+          _spots = dedupedSpots;
           _parkingConfig = config;
           _loading = false;
         });
@@ -46,6 +53,7 @@ class _ParkingMapScreenState extends State<ParkingMapScreen> {
   }
 
   Color _getSpotColor(String status) {
+    if (status == 'reserved') return Colors.blue.shade600;
     return status == 'available' ? Colors.green.shade600 : Colors.red.shade600;
   }
 
@@ -171,6 +179,7 @@ class _ParkingMapScreenState extends State<ParkingMapScreen> {
                     children: [
                       _buildLegendItem(Icons.check_circle, 'Disponibil', Colors.green.shade600),
                       _buildLegendItem(Icons.cancel, 'Ocupat', Colors.red.shade600),
+                      _buildLegendItem(Icons.bookmark, 'Rezervat', Colors.blue.shade600),
                       _buildLegendItem(Icons.place, 'Locații', Colors.blue.shade700),
                     ],
                   ),
@@ -251,7 +260,10 @@ class _ParkingMapScreenState extends State<ParkingMapScreen> {
     for (var spot in _spots) {
       final String name = spot['name'];
       if (name.isNotEmpty) {
-        final String row = name[0]; // Prima literă (A, B, C...)
+        // Find the first letter to categorize by (e.g., "A", "B", "C")
+        final match = RegExp(r'^([A-Z])').firstMatch(name.toUpperCase());
+        final String row = match != null ? match.group(1)! : 'Other';
+
         if (!rows.containsKey(row)) {
           rows[row] = [];
         }
@@ -273,25 +285,67 @@ class _ParkingMapScreenState extends State<ParkingMapScreen> {
         });
 
         return Padding(
-          padding: const EdgeInsets.only(bottom: 16),
+          padding: const EdgeInsets.only(bottom: 24),
           child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               // Label rând
-              Text(
-                'Rândul $rowKey',
-                style: TextStyle(
-                  fontSize: 16,
-                  fontWeight: FontWeight.bold,
-                  color: Colors.grey.shade700,
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                child: Row(
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.all(8),
+                      decoration: BoxDecoration(
+                        color: Colors.blue.shade100,
+                        shape: BoxShape.circle,
+                      ),
+                      child: Text(
+                        rowKey,
+                        style: TextStyle(
+                          fontSize: 20,
+                          fontWeight: FontWeight.bold,
+                          color: Colors.blue.shade900,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    Text(
+                      'Zona $rowKey',
+                      style: TextStyle(
+                         fontSize: 18,
+                         fontWeight: FontWeight.bold,
+                         color: Colors.grey.shade800,
+                      ),
+                    ),
+                    const Spacer(),
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+                      decoration: BoxDecoration(
+                        color: Colors.grey.shade200,
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      child: Text(
+                        '${rowSpots.length} Locuri',
+                        style: TextStyle(
+                          color: Colors.grey.shade700,
+                          fontSize: 12,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                    ),
+                  ],
                 ),
               ),
               const SizedBox(height: 8),
               // Spoturi în rând
-              Wrap(
-                spacing: 8,
-                runSpacing: 8,
-                alignment: WrapAlignment.center,
-                children: rowSpots.map((spot) => _buildSpotCard(spot)).toList(),
+              Center(
+                child: Wrap(
+                  spacing: 12,
+                  runSpacing: 12,
+                  alignment: WrapAlignment.start,
+                  children: rowSpots.map((spot) => _buildSpotCard(spot)).toList(),
+                ),
               ),
             ],
           ),
@@ -365,13 +419,17 @@ class _ParkingMapScreenState extends State<ParkingMapScreen> {
             Row(
               children: [
                 Icon(
-                  spot['status'] == 'available' ? Icons.check_circle : Icons.cancel,
+                  spot['status'] == 'available' 
+                      ? Icons.check_circle 
+                      : (spot['status'] == 'reserved' ? Icons.bookmark : Icons.cancel),
                   color: _getSpotColor(spot['status']),
                   size: 32,
                 ),
                 const SizedBox(width: 12),
                 Text(
-                  spot['status'] == 'available' ? 'Disponibil' : 'Ocupat',
+                  spot['status'] == 'available' 
+                      ? 'Disponibil' 
+                      : (spot['status'] == 'reserved' ? 'Rezervat' : 'Ocupat'),
                   style: TextStyle(
                     fontSize: 20,
                     color: _getSpotColor(spot['status']),

@@ -20,6 +20,8 @@ export class ParkingConfigController {
       exitLng: number;
       shopLat: number;
       shopLng: number;
+      parkingCostPerHour?: number;
+      speedLimit?: number;
     },
   ) {
     return this.configService.updateConfig(body);

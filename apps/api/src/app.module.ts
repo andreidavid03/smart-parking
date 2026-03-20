@@ -6,6 +6,7 @@ import { PrismaModule } from './prisma/pristma.module';
 import { EntryModule } from './entry/entry.module';
 import { AuthModule } from './auth/auth.module';
 import { ParkingModule } from './parking/parking.module';
+import { MqttModule } from './mqtt/mqtt.module';
 
 @Module({
   imports: [
@@ -15,6 +16,7 @@ import { ParkingModule } from './parking/parking.module';
     EntryModule,
     AuthModule,
     ParkingModule,
+    MqttModule,
   ],
   controllers: [HealthController],
   providers: [],

@@ -9,5 +9,6 @@ import { PrismaModule } from '../prisma/pristma.module';
   imports: [PrismaModule],
   controllers: [ParkingController, ParkingConfigController],
   providers: [ParkingService, ParkingConfigService],
+  exports: [ParkingService],
 })
 export class ParkingModule {}

@@ -14,11 +14,14 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
   
   bool _isLoading = true;
   bool _isSaving = false;
-  
+  bool _isSavingPayment = false;
+
   String? _email;
   String? _carColor;
   String? _preferredSpot;
-  String? _spotPreferenceType; // 'specific', 'entrance', 'exit', 'shop', null
+  String? _spotPreferenceType;
+  String? _paymentMethodType;   // 'card' | 'cash' | 'phone'
+  String? _paymentDisplay;      // e.g. 'Visa ****1234'
   
   List<Map<String, dynamic>> _spots = [];
   
@@ -27,6 +30,18 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
     super.initState();
     _loadProfile();
     _loadSpots();
+    _loadPaymentMethod();
+  }
+
+  Future<void> _loadPaymentMethod() async {
+    final type = await _storage.read(key: 'payment_method_type');
+    final display = await _storage.read(key: 'payment_display');
+    if (mounted) {
+      setState(() {
+        _paymentMethodType = type;
+        _paymentDisplay = display;
+      });
+    }
   }
 
   Future<void> _loadProfile() async {
@@ -268,10 +283,14 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
                       const SizedBox(height: 24),
                     ],
 
+                    // Payment method section
+                    _buildPaymentMethodSection(),
+
+                    const SizedBox(height: 16),
+
                     // Info card
                     Container(
-                      margin: const EdgeInsets.all(16),
-                      padding: const EdgeInsets.all(16),
+                      margin: const EdgeInsets.all(16),                      padding: const EdgeInsets.all(16),
                       decoration: BoxDecoration(
                         color: Colors.blue.shade50,
                         borderRadius: BorderRadius.circular(12),
@@ -462,8 +481,7 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
     );
   }
 
-  Widget _buildSpecificSpotsGrid() {
-    if (_spots.isEmpty) {
+  Widget _buildSpecificSpotsGrid() {    if (_spots.isEmpty) {
       return const Center(child: CircularProgressIndicator());
     }
 
@@ -515,6 +533,164 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
           ),
         );
       },
+    );
+  }
+
+  Widget _buildPaymentMethodSection() {
+    final methods = [
+      {'type': 'card',  'icon': Icons.credit_card,   'label': 'Card bancar',          'color': Colors.blue},
+      {'type': 'cash',  'icon': Icons.money,          'label': 'Numerar',              'color': Colors.green},
+      {'type': 'phone', 'icon': Icons.phone_android,  'label': 'Apple / Google Pay',   'color': Colors.purple},
+    ];
+
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 16),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text(
+            '💳 Metodă de Plată Salvată',
+            style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+          ),
+          const SizedBox(height: 4),
+          Text(
+            'Selectează metoda folosită la ieșire — plata va fi procesată automat.',
+            style: TextStyle(fontSize: 12, color: Colors.grey.shade600),
+          ),
+          const SizedBox(height: 12),
+          ...methods.map((m) {
+            final selected = _paymentMethodType == m['type'];
+            final color = m['color'] as Color;
+            return GestureDetector(
+              onTap: _isSavingPayment
+                  ? null
+                  : () async {
+                      setState(() => _isSavingPayment = true);
+                      // For card type show a quick dialog to enter last 4 digits
+                      String? display;
+                      if (m['type'] == 'card') {
+                        display = await _askCardDetails();
+                        if (display == null) {
+                          setState(() => _isSavingPayment = false);
+                          return;
+                        }
+                      } else {
+                        display = m['label'] as String;
+                      }
+                      await _storage.write(
+                          key: 'payment_method_type',
+                          value: m['type'] as String);
+                      await _storage.write(
+                          key: 'payment_display', value: display);
+                      setState(() {
+                        _paymentMethodType = m['type'] as String;
+                        _paymentDisplay = display;
+                        _isSavingPayment = false;
+                      });
+                      if (mounted) {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(
+                            content: Text('✅ Metodă de plată salvată: $display'),
+                            backgroundColor: Colors.green,
+                          ),
+                        );
+                      }
+                    },
+              child: Container(
+                margin: const EdgeInsets.only(bottom: 10),
+                padding: const EdgeInsets.all(14),
+                decoration: BoxDecoration(
+                  color: selected ? color.withValues(alpha: 0.1) : Colors.white,
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(
+                    color: selected ? color : Colors.grey.shade300,
+                    width: selected ? 2 : 1,
+                  ),
+                ),
+                child: Row(
+                  children: [
+                    Icon(m['icon'] as IconData,
+                        color: selected ? color : Colors.grey.shade600, size: 26),
+                    const SizedBox(width: 14),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            m['label'] as String,
+                            style: TextStyle(
+                              fontWeight: FontWeight.bold,
+                              fontSize: 15,
+                              color: selected ? color : Colors.black87,
+                            ),
+                          ),
+                          if (selected && _paymentDisplay != null)
+                            Text(
+                              _paymentDisplay!,
+                              style: TextStyle(
+                                  fontSize: 12, color: Colors.grey.shade600),
+                            ),
+                        ],
+                      ),
+                    ),
+                    if (selected)
+                      Icon(Icons.check_circle, color: color, size: 22),
+                  ],
+                ),
+              ),
+            );
+          }),
+          if (_paymentMethodType != null)
+            TextButton.icon(
+              onPressed: () async {
+                await _storage.delete(key: 'payment_method_type');
+                await _storage.delete(key: 'payment_display');
+                setState(() {
+                  _paymentMethodType = null;
+                  _paymentDisplay = null;
+                });
+              },
+              icon: Icon(Icons.delete_outline, color: Colors.red.shade400, size: 18),
+              label: Text('Șterge metoda salvată',
+                  style: TextStyle(color: Colors.red.shade400, fontSize: 13)),
+            ),
+        ],
+      ),
+    );
+  }
+
+  Future<String?> _askCardDetails() async {
+    final ctrl = TextEditingController();
+    return showDialog<String>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Card bancar'),
+        content: TextField(
+          controller: ctrl,
+          keyboardType: TextInputType.number,
+          maxLength: 4,
+          decoration: const InputDecoration(
+            labelText: 'Ultimele 4 cifre ale cardului',
+            hintText: '1234',
+            prefixIcon: Icon(Icons.credit_card),
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(null),
+            child: const Text('Anulează'),
+          ),
+          ElevatedButton(
+            onPressed: () {
+              final digits = ctrl.text.trim();
+              if (digits.length == 4 && RegExp(r'^\d{4}$').hasMatch(digits)) {
+                Navigator.of(ctx).pop('Card ****$digits');
+              }
+            },
+            child: const Text('Salvează'),
+          ),
+        ],
+      ),
     );
   }
 }

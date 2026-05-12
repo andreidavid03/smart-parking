@@ -144,10 +144,34 @@ def start_docker_containers():
         print_error(f"Eroare la pornirea Docker: {e}")
         return False
 
+def free_port(port):
+    """Kill any process holding the given port"""
+    try:
+        import os, signal
+        result = subprocess.run(
+            ['lsof', '-ti', f'tcp:{port}'],
+            capture_output=True, text=True, check=False
+        )
+        pids = result.stdout.strip().split()
+        for pid in pids:
+            if pid:
+                try:
+                    os.kill(int(pid), signal.SIGKILL)
+                except Exception:
+                    pass
+        if pids:
+            time.sleep(1)
+    except Exception:
+        pass
+
+
 def start_backend():
     """Pornește Backend NestJS în background"""
     print_info("Pornesc Backend NestJS...")
-    
+
+    # Free port 3000 first so no EADDRINUSE
+    free_port(3000)
+
     backend_path = Path(__file__).parent / "apps/api"
     
     try:
@@ -165,10 +189,11 @@ def start_backend():
             )
         else:
             # macOS/Linux: use osascript to open new Terminal tab
+            root_path = Path(__file__).parent
             script = f'''
 tell application "Terminal"
     activate
-    do script "cd {backend_path} && npm run start:dev"
+    do script "cd {root_path} && zsh run_backend.sh"
 end tell
 '''
             subprocess.Popen(['osascript', '-e', script])
@@ -275,11 +300,61 @@ end tell
         print_error(f"Eroare la pornirea Flutter: {e}")
         return False
 
+def start_scanner_bridge():
+    """Afișează instrucțiuni pentru Scanner Bridge"""
+    print_success("QR Scanner Bridge: rulează din VS Code terminal (vezi nota de mai jos)")
+    return True
+
+
+def start_dashboard():
+    """Pornește dashboard-ul web pe port 8090"""
+    print_info("Pornesc Dashboard web pe http://localhost:8090/dashboard.html ...")
+
+    project_path = str(Path(__file__).parent)
+
+    try:
+        free_port(8090)
+        subprocess.Popen(
+            [sys.executable, '-m', 'http.server', '8090', '--directory', project_path],
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+        )
+        time.sleep(1)
+        subprocess.Popen(['open', 'http://localhost:8090/dashboard.html'])
+        print_success("Dashboard pornit: http://localhost:8090/dashboard.html")
+        return True
+    except Exception as e:
+        print_error(f"Eroare la pornirea Dashboard: {e}")
+        return False
+
+
+def start_homebrew_services():
+    """Pornește Mosquitto + PostgreSQL via Homebrew (fallback când Docker nu e disponibil)"""
+    print_info("Pornesc Mosquitto + PostgreSQL via Homebrew...")
+    try:
+        subprocess.run(['brew', 'services', 'start', 'mosquitto'], check=False, capture_output=True)
+        subprocess.run(['brew', 'services', 'start', 'postgresql@16'], check=False, capture_output=True)
+        time.sleep(2)
+        # Verify mosquitto port
+        import socket as _s
+        try:
+            c = _s.create_connection(('localhost', 1883), timeout=2)
+            c.close()
+            print_success("Mosquitto MQTT pornit pe localhost:1883")
+        except Exception:
+            print_warning("Mosquitto pare offline — verifică manual: brew services start mosquitto")
+        print_success("PostgreSQL pornit pe localhost:5432")
+        return True
+    except Exception as e:
+        print_error(f"Eroare Homebrew services: {e}")
+        return False
+
+
 def main():
     print_header("🚗 SMART PARKING - STARTUP SCRIPT 🚗")
     
     # Step 1: Detect and update IP
-    print_info("Pas 1/4: Detectez IP-ul local...")
+    print_info("Pas 1/5: Detectez IP-ul local...")
     ip_address = get_local_ip()
     print_success(f"IP detectat: {ip_address}")
     
@@ -287,30 +362,38 @@ def main():
         print_error("Nu pot actualiza IP-ul în Flutter")
         sys.exit(1)
     
-    # Step 2: Check and start Docker
-    print_info("\nPas 2/4: Verific Docker...")
-    if not check_docker():
-        print_error("Docker nu este pornit sau nu este instalat!")
-        print_info("Te rog pornește Docker Desktop și încearcă din nou.")
-        sys.exit(1)
-    
-    print_success("Docker este disponibil")
-    
-    if not start_docker_containers():
-        print_error("Nu pot porni Docker containers")
-        sys.exit(1)
+    # Step 2: Check and start Docker (fallback to Homebrew)
+    print_info("\nPas 2/5: Verific Docker...")
+    if check_docker():
+        print_success("Docker este disponibil")
+        if not start_docker_containers():
+            print_error("Nu pot porni Docker containers")
+            sys.exit(1)
+    else:
+        print_warning("Docker offline — folosesc Homebrew (mosquitto + postgresql@16)")
+        if not start_homebrew_services():
+            print_error("Nu pot porni serviciile de infrastructură")
+            sys.exit(1)
     
     # Step 3: Start Backend
-    print_info("\nPas 3/4: Pornesc Backend...")
+    print_info("\nPas 3/5: Pornesc Backend...")
     if not start_backend():
         print_warning("Backend nu a pornit corect, dar continuăm...")
     
     # Step 4: Start Flutter
-    print_info("\nPas 4/4: Pornesc Flutter...")
+    print_info("\nPas 4/5: Pornesc Flutter...")
     if not start_flutter():
         print_error("Nu pot porni Flutter app")
         sys.exit(1)
-    
+
+    # Step 5: Start Scanner Bridge
+    print_info("\nPas 5/6: Pornesc QR Scanner Bridge...")
+    start_scanner_bridge()
+
+    # Step 6: Start Dashboard
+    print_info("\nPas 6/6: Pornesc Dashboard web...")
+    start_dashboard()
+
     # Summary
     print_header("✅ TOATE SERVICIILE AU PORNIT! ✅")
     print(f"""
@@ -320,6 +403,7 @@ def main():
   • Adminer: http://localhost:8080
   • MQTT: localhost:1883
   • Flutter App: iPhone Simulator
+  • 🌐 Dashboard: http://localhost:8090/dashboard.html
 
 {Colors.OKCYAN}IP detectat: {ip_address}{Colors.ENDC}
 
@@ -328,6 +412,10 @@ def main():
   - Apasă Ctrl+C în fiecare tab pentru a opri serviciile
   - Pentru hot reload Flutter: apasă 'r' în terminal
   - Pentru hot restart Flutter: apasă 'R' în terminal
+
+{Colors.BOLD}▶  Dashboard QR Scanner — deschis automat în browser:{Colors.ENDC}
+{Colors.OKGREEN}   http://localhost:8090/dashboard.html{Colors.ENDC}
+  Click pe bara verde din dashboard, apoi scanează cu GM65
 
 {Colors.BOLD}Happy coding! 🚀{Colors.ENDC}
 """)

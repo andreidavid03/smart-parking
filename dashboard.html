@@ -1,0 +1,1072 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Smart Parking – Dashboard</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    :root {
+      --bg:#1e1e2e; --surface:#313244; --surface2:#45475a; --surface3:#181825;
+      --text:#cdd6f4; --sub:#a6adc8; --muted:#6c7086; --border:#45475a;
+      --green:#a6e3a1; --red:#f38ba8; --blue:#89b4fa;
+      --yellow:#f9e2af; --orange:#fab387; --purple:#cba6f7; --teal:#94e2d5;
+    }
+    html,body { height:100%; font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;
+      background:var(--bg); color:var(--text); font-size:14px; }
+
+    /* HEADER */
+    header { display:flex; align-items:center; justify-content:space-between;
+      padding:10px 20px; background:var(--surface); border-bottom:1px solid var(--border);
+      position:sticky; top:0; z-index:100; gap:12px; flex-wrap:wrap; }
+    header h1 { font-size:16px; font-weight:700; color:var(--blue); white-space:nowrap; }
+    #clock { font-size:12px; color:var(--muted); font-family:monospace; }
+
+    /* STATUS BAR */
+    .sbar { display:flex; gap:6px; padding:8px 20px; border-bottom:1px solid var(--border);
+      flex-wrap:wrap; align-items:center; }
+    .pill { display:flex; align-items:center; gap:5px; padding:3px 11px; border-radius:20px;
+      font-size:11px; font-weight:700; border:1px solid transparent; white-space:nowrap; }
+    .pill .dot { width:7px; height:7px; border-radius:50%; flex-shrink:0; }
+    .pill.ok   { background:rgba(166,227,161,.1); border-color:rgba(166,227,161,.35); color:var(--green); }
+    .pill.ok   .dot { background:var(--green); box-shadow:0 0 4px var(--green); }
+    .pill.err  { background:rgba(243,139,168,.1); border-color:rgba(243,139,168,.35); color:var(--red); }
+    .pill.err  .dot { background:var(--red); }
+    .pill.warn { background:rgba(249,226,175,.1); border-color:rgba(249,226,175,.35); color:var(--yellow); }
+    .pill.warn .dot { background:var(--yellow); }
+    .pill.idle { background:var(--surface); border-color:var(--border); color:var(--muted); }
+    .pill.idle .dot { background:var(--muted); }
+    .rbtn { margin-left:auto; cursor:pointer; background:var(--surface); border:1px solid var(--border);
+      color:var(--sub); padding:3px 13px; border-radius:20px; font-size:11px; font-weight:700; }
+    .rbtn:hover { background:var(--surface2); }
+
+    /* LAYOUT */
+    .main { padding:14px 20px; display:grid; gap:14px; }
+    .top-row { display:grid; grid-template-columns:1fr 1fr; gap:14px; }
+    @media(max-width:820px) { .top-row { grid-template-columns:1fr; } }
+
+    /* PANEL */
+    .panel { background:var(--surface); border-radius:12px; border:1px solid var(--border); overflow:hidden; }
+    .ph { padding:9px 16px; border-bottom:1px solid var(--border); font-size:11px;
+      font-weight:700; color:var(--sub); text-transform:uppercase; letter-spacing:.06em;
+      display:flex; align-items:center; gap:8px; }
+    .ph .hr { margin-left:auto; font-size:11px; color:var(--muted); text-transform:none;
+      font-weight:400; letter-spacing:0; }
+    .pb { padding:14px 16px; }
+
+    /* SCANNER PANEL */
+    .focus-bar { display:flex; align-items:center; gap:10px; padding:12px 16px;
+      cursor:pointer; user-select:none; border-bottom:1px solid var(--border); transition:background .2s; }
+    .focus-bar:hover { background:rgba(255,255,255,.02); }
+    .focus-bar.active { background:rgba(166,227,161,.05); }
+    .fdot { width:12px; height:12px; border-radius:50%; background:var(--muted); flex-shrink:0; transition:background .3s; }
+    .fdot.on  { background:var(--green); box-shadow:0 0 7px var(--green); }
+    .fdot.off { background:var(--red); }
+    #scanner-input { position:absolute; left:-9999px; width:1px; height:1px; opacity:0; }
+    .buf-row { padding:5px 16px; font-family:monospace; font-size:12px; color:var(--orange);
+      min-height:26px; border-bottom:1px solid var(--border); }
+    .last-row { padding:10px 16px; display:flex; gap:10px; align-items:flex-start; }
+    .sbadge { flex-shrink:0; padding:3px 9px; border-radius:5px; font-weight:700; font-size:11px; }
+    .b-ok   { background:rgba(166,227,161,.18); color:var(--green); }
+    .b-err  { background:rgba(243,139,168,.18); color:var(--red);   }
+    .b-idle { background:var(--surface2); color:var(--muted); }
+    #last-detail { font-size:12px; color:var(--sub); word-break:break-all; }
+    .manual-row { padding:8px 16px; border-top:1px solid var(--border); display:flex; gap:7px; }
+    .manual-row input { flex:1; background:var(--bg); border:1px solid var(--border);
+      border-radius:6px; padding:5px 9px; color:var(--text); font-size:12px; }
+    .manual-row input:focus { outline:none; border-color:var(--blue); }
+    .manual-row button { background:var(--blue); border:none; border-radius:6px;
+      padding:5px 14px; color:#1e1e2e; font-weight:700; font-size:12px; cursor:pointer; }
+    .manual-row button:hover { opacity:.85; }
+
+    /* SENSOR CARDS */
+    .scard { background:var(--surface3); border:1px solid var(--border); border-radius:10px;
+      padding:12px 14px; transition:border-color .3s; }
+    .scard.ok   { border-color:rgba(166,227,161,.4); }
+    .scard.warn { border-color:rgba(249,226,175,.4); }
+    .scard.err  { border-color:rgba(243,139,168,.5); background:rgba(243,139,168,.05); }
+    .sc-lbl { font-size:11px; color:var(--muted); margin-bottom:6px; }
+    .sc-val { font-size:20px; font-weight:700; color:var(--text); font-family:monospace; }
+
+    /* MOCK SCAN USERS */
+    .user-grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(200px,1fr)); gap:8px; }
+    .user-card { background:var(--surface3); border:1px solid var(--border);
+      border-radius:9px; padding:10px 12px; }
+    .user-email { font-size:12px; color:var(--blue); margin-bottom:4px;
+      overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+    .user-role  { font-size:10px; color:var(--muted); margin-bottom:4px; }
+    .user-qr   { font-size:10px; color:var(--muted); font-family:monospace;
+      margin-bottom:8px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+    .user-status { font-size:10px; font-weight:700; margin-bottom:6px; }
+    .user-status.parked  { color:var(--red); }
+    .user-status.free    { color:var(--green); }
+    .user-actions { display:flex; gap:5px; }
+    .scan-btn  { flex:1; border:none; border-radius:5px; padding:5px 0;
+      font-size:11px; font-weight:700; cursor:pointer; transition:background .15s; }
+    .entry-btn { background:rgba(166,227,161,.18); color:var(--green); border:1px solid rgba(166,227,161,.35); }
+    .entry-btn:hover:not(:disabled) { background:rgba(166,227,161,.35); }
+    .exit-btn  { background:rgba(243,139,168,.18); color:var(--red);   border:1px solid rgba(243,139,168,.35); }
+    .exit-btn:hover:not(:disabled)  { background:rgba(243,139,168,.35); }
+    .scan-btn:disabled { opacity:.35; cursor:not-allowed; }
+
+    /* SPOTS */
+    #spots-grid { gap:10px; }
+    .spots-map { display:flex; flex-direction:column; gap:8px; }
+    .spots-row  { display:flex; gap:8px; align-items:stretch; }
+    .spots-row-label { font-size:12px; font-weight:700; color:var(--muted); width:22px; display:flex; align-items:center; justify-content:center; flex-shrink:0; }
+    .road-divider { height:22px; background:repeating-linear-gradient(90deg,var(--surface3) 0,var(--surface3) 18px,transparent 18px,transparent 36px); border-radius:4px; display:flex; align-items:center; justify-content:center; font-size:10px; color:var(--muted); letter-spacing:2px; margin:2px 0; }
+    .spot-card { border-radius:10px; padding:11px 8px; text-align:center;
+      border:2px solid transparent; transition:all .3s; flex:1; min-width:90px; }
+    .spot-card.available { background:rgba(166,227,161,.07); border-color:rgba(166,227,161,.35); }
+    .spot-card.occupied  { background:rgba(243,139,168,.07); border-color:rgba(243,139,168,.4); }
+    .spot-card.reserved  { background:rgba(137,180,250,.07); border-color:rgba(137,180,250,.4); }
+    .spot-name  { font-size:20px; font-weight:700; margin-bottom:2px; }
+    .spot-card.available .spot-name { color:var(--green); }
+    .spot-card.occupied  .spot-name { color:var(--red); }
+    .spot-card.reserved  .spot-name { color:var(--blue); }
+    .spot-lbl  { font-size:10px; color:var(--muted); }
+    .spot-user { margin-top:3px; font-size:10px; color:var(--sub);
+      overflow:hidden; text-overflow:ellipsis; white-space:nowrap; height:14px; }
+    /* Sensor buttons */
+    .spot-btns { display:flex; gap:3px; margin-top:7px; }
+    .snr-btn { flex:1; border:none; border-radius:4px; padding:4px 0;
+      font-size:10px; font-weight:700; cursor:pointer; transition:background .15s; }
+    .snr-occ { background:rgba(243,139,168,.18); color:var(--red);
+      border:1px solid rgba(243,139,168,.35); }
+    .snr-occ:hover { background:rgba(243,139,168,.38); }
+    .snr-avl { background:rgba(166,227,161,.18); color:var(--green);
+      border:1px solid rgba(166,227,161,.35); }
+    .snr-avl:hover { background:rgba(166,227,161,.38); }
+
+    /* SESSIONS / LOG */
+    .two-col { display:grid; grid-template-columns:1fr 1fr; gap:14px; }
+    @media(max-width:800px) { .two-col { grid-template-columns:1fr; } }
+    .sess-table { width:100%; border-collapse:collapse; }
+    .sess-table th { text-align:left; font-size:10px; text-transform:uppercase;
+      letter-spacing:.05em; color:var(--muted); padding:6px 10px; border-bottom:1px solid var(--border); }
+    .sess-table td { padding:8px 10px; border-bottom:1px solid rgba(69,71,90,.4); font-size:12px; }
+    .sess-table tr:last-child td { border-bottom:none; }
+    .ems  { max-width:140px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+    .spill { display:inline-block; padding:2px 7px; border-radius:4px;
+      background:rgba(243,139,168,.15); color:var(--red); font-weight:700; font-size:11px; }
+    .dur  { color:var(--yellow); font-family:monospace; font-size:11px; }
+    .empty { text-align:center; color:var(--muted); padding:24px; font-size:13px; }
+
+    /* EVENT LOG */
+    #elog { height:260px; overflow-y:auto; font-family:monospace; font-size:12px; }
+    .le  { padding:3px 2px; border-bottom:1px solid rgba(69,71,90,.25);
+      display:flex; gap:9px; align-items:baseline; }
+    .lt  { color:var(--muted); flex-shrink:0; font-size:10px; }
+    .lok    { color:var(--green); }
+    .lerr   { color:var(--red); }
+    .linfo  { color:var(--blue); }
+    .lscan  { color:var(--orange); }
+    .lwarn  { color:var(--yellow); }
+    .lsensor{ color:var(--teal); }
+
+    /* DIAG */
+    .diag { background:var(--surface3); border-radius:12px; border:1px solid var(--border); padding:12px 16px; }
+    .diag h3 { font-size:10px; text-transform:uppercase; letter-spacing:.06em; color:var(--muted); margin-bottom:9px; }
+    .dg { display:grid; grid-template-columns:repeat(auto-fill,minmax(180px,1fr)); gap:7px; }
+    .di { background:var(--surface); border-radius:7px; padding:9px 12px; border-left:3px solid var(--border); }
+    .di.ok   { border-left-color:var(--green); }
+    .di.err  { border-left-color:var(--red); }
+    .dlbl { font-size:10px; color:var(--muted); margin-bottom:2px; }
+    .dval { font-size:13px; font-weight:600; }
+
+    .sm-btn { background:var(--surface2); border:none; border-radius:4px;
+      color:var(--muted); padding:2px 8px; cursor:pointer; font-size:10px; }
+    .sm-btn:hover { color:var(--text); }
+    ::-webkit-scrollbar { width:3px; }
+    ::-webkit-scrollbar-thumb { background:var(--surface2); border-radius:2px; }
+
+    /* MQTT LOG */
+    #mqtt-log { height:220px; overflow-y:auto; font-family:monospace; font-size:11px; }
+    .ml { padding:3px 4px; border-bottom:1px solid rgba(69,71,90,.2);
+      display:flex; gap:8px; align-items:baseline; flex-wrap:wrap; }
+    .ml-time { color:var(--muted); flex-shrink:0; font-size:10px; }
+    .ml-in   { color:var(--blue);   font-weight:700; flex-shrink:0; }
+    .ml-out  { color:var(--orange); font-weight:700; flex-shrink:0; }
+    .ml-topic   { color:var(--teal); font-weight:700; flex-shrink:0; }
+    .ml-payload { color:var(--sub); word-break:break-all; }
+  </style>
+</head>
+<body>
+
+<header>
+  <h1>🚗 Smart Parking — Operations Dashboard</h1>
+  <div id="clock">00:00:00</div>
+</header>
+
+<div class="sbar">
+  <div class="pill idle" id="pill-api">  <span class="dot"></span> API</div>
+  <div class="pill idle" id="pill-mqtt"><span class="dot"></span> MQTT</div>
+  <div class="pill idle" id="pill-spots"><span class="dot"></span> Spots</div>
+  <div class="pill idle" id="pill-sess"><span class="dot"></span> Sessions</div>
+  <div class="pill idle" id="pill-users"><span class="dot"></span> Users</div>
+  <button class="rbtn" onclick="doRefresh()">↻ Refresh</button>
+</div>
+
+<div class="main">
+
+  <!-- ROW 1: Hardware scanner + Mock scan -->
+  <div class="top-row">
+
+    <!-- Hardware QR Scanner -->
+    <div class="panel">
+      <div class="ph">📷 GM65 QR Scanner
+        <span class="hr">Click green bar, then scan</span>
+      </div>
+      <div class="focus-bar" id="focus-bar" onclick="activateScanner()">
+        <div class="fdot off" id="fdot"></div>
+        <span id="flabel">🔴 INACTIVE — click here to activate</span>
+      </div>
+      <input type="text" id="scanner-input" autocomplete="off" spellcheck="false">
+      <div class="buf-row" id="buf">—</div>
+      <div class="last-row">
+        <div class="sbadge b-idle" id="lbadge">—</div>
+        <div id="last-detail">No scans yet. Activate above, then point GM65 at a QR code.</div>
+      </div>
+      <div class="manual-row">
+        <input type="text" id="manual-input" placeholder="Paste QR code, press Enter or Send">
+        <button onclick="manualSend()">Send</button>
+      </div>
+    </div>
+
+    <!-- Mock QR Scan: users list -->
+    <div class="panel">
+      <div class="ph">👤 Mock QR Scan — Users
+        <span class="hr">Simulates a real scan for that user</span>
+      </div>
+      <div class="pb">
+        <div class="user-grid" id="user-grid">
+          <p style="color:var(--muted);font-size:12px">Loading…</p>
+        </div>
+      </div>
+    </div>
+
+  </div><!-- /top-row -->
+
+  <!-- ROW 2: Spots + sensor controls -->
+  <div class="panel">
+    <div class="ph">🅿️ Parking Spots &amp; Camera Simulation
+      <span class="hr">🚗 In / ✓ Out simulate the camera detecting a car in a spot → updates DB via MQTT</span>
+    </div>
+    <div class="pb">
+      <div id="spots-grid"><p style="color:var(--muted)">Loading spots…</p></div>
+    </div>
+  </div>
+
+  <!-- ROW 3: Active sessions + Event log -->
+  <div class="two-col">
+    <div class="panel">
+      <div class="ph">🚗 Active Sessions</div>
+      <div id="sess-wrap"><p class="empty">No active sessions</p></div>
+    </div>
+    <div class="panel">
+      <div class="ph">📋 Event Log
+        <span class="hr"><button class="sm-btn" onclick="clearLog()">Clear</button></span>
+      </div>
+      <div class="pb" style="padding:7px 10px"><div id="elog"></div></div>
+    </div>
+  </div>
+
+  <!-- ROW 3.5: MQTT / Arduino Log -->
+  <div class="panel">
+    <div class="ph">📡 MQTT / Arduino Log
+      <span class="hr"><button class="sm-btn" onclick="clearMqttLog()">Clear</button></span>
+    </div>
+    <div class="pb" style="padding:7px 10px">
+      <div id="mqtt-log"><p style="color:var(--muted);font-size:12px;padding:8px">Waiting for MQTT messages…</p></div>
+    </div>
+  </div>
+
+  <!-- ROW 3.55: Camera Feed -->
+  <div class="panel">
+    <div class="ph">📷 Camera Live
+      <span class="hr" style="display:flex;align-items:center;gap:6px">
+        <input id="cam-ip" type="text" placeholder="IP cameră (ex: 192.168.1.200)"
+          style="background:var(--surface3);border:1px solid var(--border);border-radius:6px;
+                 color:var(--text);padding:4px 8px;font-size:12px;width:200px"
+          value="" />
+        <button class="sm-btn" onclick="connectCamera()">Conectează</button>
+        <button class="sm-btn" style="background:var(--red)" onclick="disconnectCamera()">Stop</button>
+        <span id="cam-status" style="font-size:11px;color:var(--muted)">Neconectat</span>
+      </span>
+    </div>
+    <div class="pb" style="display:flex;justify-content:center;align-items:center;min-height:200px;background:#000;border-radius:8px">
+      <img id="cam-feed" src="" alt=""
+        style="display:none;max-width:100%;border-radius:8px;max-height:480px"
+        onerror="onCamError()" />
+      <span id="cam-placeholder" style="color:var(--muted);font-size:13px">Introdu IP-ul ESP32-CAM și apasă Conectează</span>
+    </div>
+  </div>
+
+  <!-- ROW 3.6: Sensor Live Data -->
+  <div class="panel">
+    <div class="ph">🔌 Senzori ESP32 — Live
+      <span class="hr" id="sensor-updated" style="color:var(--muted)">Așteptăm date...</span>
+    </div>
+    <div class="pb">
+      <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:10px" id="sensor-grid">
+        <div class="scard" id="sc-temp">   <div class="sc-lbl">🌡️ Temperatură</div><div class="sc-val" id="sv-temp">—</div></div>
+        <div class="scard" id="sc-hum">    <div class="sc-lbl">💧 Umiditate</div><div class="sc-val" id="sv-hum">—</div></div>
+        <div class="scard" id="sc-press">  <div class="sc-lbl">📊 Presiune</div><div class="sc-val" id="sv-press">—</div></div>
+        <div class="scard" id="sc-gas1">   <div class="sc-lbl">💨 Gaz 1 (MQ-4)</div><div class="sc-val" id="sv-gas1">—</div></div>
+        <div class="scard" id="sc-gas2">   <div class="sc-lbl">💨 Gaz 2 (MQ-4)</div><div class="sc-val" id="sv-gas2">—</div></div>
+        <div class="scard" id="sc-flame1">
+          <div class="sc-lbl">🔥 Flacără 1 <button onclick="toggleFlameInvert(1)" id="btn-fi1" title="Inversează logică senzor" style="font-size:10px;margin-left:4px;padding:1px 5px;border-radius:4px;border:1px solid var(--border);background:var(--surface3);color:var(--muted);cursor:pointer">inv</button></div>
+          <div class="sc-val" id="sv-flame1">—</div>
+        </div>
+        <div class="scard" id="sc-flame2">
+          <div class="sc-lbl">🔥 Flacără 2 <button onclick="toggleFlameInvert(2)" id="btn-fi2" title="Inversează logică senzor" style="font-size:10px;margin-left:4px;padding:1px 5px;border-radius:4px;border:1px solid var(--border);background:var(--surface3);color:var(--muted);cursor:pointer">inv</button></div>
+          <div class="sc-val" id="sv-flame2">—</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Speed alert popup -->
+  <div id="speed-alert-overlay" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.65);z-index:9999;align-items:center;justify-content:center">
+    <div style="background:#1e1e2e;border:2px solid #f38ba8;border-radius:18px;padding:32px 36px;max-width:340px;width:90%;text-align:center;box-shadow:0 0 40px rgba(243,139,168,.4);position:relative">
+      <div style="font-size:52px;margin-bottom:10px">🚨</div>
+      <div style="font-size:22px;font-weight:800;color:#f38ba8;margin-bottom:6px">VITEZĂ DEPĂȘITĂ!</div>
+      <div style="font-size:48px;font-weight:900;color:#fab387;font-family:monospace;margin:10px 0" id="speed-alert-val">—</div>
+      <div style="font-size:13px;color:#a6adc8;margin-bottom:6px">Limita admisă: <span id="speed-alert-limit" style="color:#f9e2af;font-weight:700">10 km/h</span></div>
+      <div style="font-size:12px;color:#6c7086;margin-bottom:20px" id="speed-alert-time"></div>
+      <button onclick="dismissSpeedAlert()" style="background:#f38ba8;color:#1e1e2e;border:none;border-radius:10px;padding:10px 32px;font-size:14px;font-weight:800;cursor:pointer;width:100%">✓ Am înțeles</button>
+    </div>
+  </div>
+
+  <!-- Manual sensor override panel -->
+  <div class="panel" id="manual-panel">
+    <div class="ph" style="cursor:pointer" onclick="toggleManualPanel()">🔧 Simulare manuală senzori
+      <span class="hr" style="font-size:11px;color:var(--muted)" id="manual-ph-hint">▼ Expandează</span>
+    </div>
+    <div class="pb" id="manual-panel-body" style="display:none">
+      <div style="font-size:11px;color:var(--muted);margin-bottom:10px">Valorile introduse aci suprascriau datele MQTT. Lasă gol = folosește MQTT live.</div>
+      <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(170px,1fr));gap:10px">
+        <label class="scard" style="flex-direction:column;gap:4px">
+          <div class="sc-lbl">🌡️ Temperatură (°C)</div>
+          <input id="mo-temp" type="number" step="0.1" placeholder="ex: 24.5"
+            style="background:var(--surface3);border:1px solid var(--border);border-radius:4px;color:var(--text);padding:4px 6px;font-size:12px;width:100%"
+            oninput="applyManualOverrides()" />
+        </label>
+        <label class="scard" style="flex-direction:column;gap:4px">
+          <div class="sc-lbl">💧 Umiditate (%)</div>
+          <input id="mo-hum" type="number" step="1" min="0" max="100" placeholder="ex: 55"
+            style="background:var(--surface3);border:1px solid var(--border);border-radius:4px;color:var(--text);padding:4px 6px;font-size:12px;width:100%"
+            oninput="applyManualOverrides()" />
+        </label>
+        <label class="scard" style="flex-direction:column;gap:4px">
+          <div class="sc-lbl">📊 Presiune (hPa)</div>
+          <input id="mo-press" type="number" step="1" placeholder="ex: 1013"
+            style="background:var(--surface3);border:1px solid var(--border);border-radius:4px;color:var(--text);padding:4px 6px;font-size:12px;width:100%"
+            oninput="applyManualOverrides()" />
+        </label>
+        <label class="scard" style="flex-direction:column;gap:4px">
+          <div class="sc-lbl">💨 Gaz 1 (MQ-4)</div>
+          <input id="mo-gas1" type="number" step="1" min="0" max="4095" placeholder="ex: 150"
+            style="background:var(--surface3);border:1px solid var(--border);border-radius:4px;color:var(--text);padding:4px 6px;font-size:12px;width:100%"
+            oninput="applyManualOverrides()" />
+        </label>
+        <label class="scard" style="flex-direction:column;gap:4px">
+          <div class="sc-lbl">💨 Gaz 2 (MQ-4)</div>
+          <input id="mo-gas2" type="number" step="1" min="0" max="4095" placeholder="ex: 150"
+            style="background:var(--surface3);border:1px solid var(--border);border-radius:4px;color:var(--text);padding:4px 6px;font-size:12px;width:100%"
+            oninput="applyManualOverrides()" />
+        </label>
+        <label class="scard" style="flex-direction:column;gap:4px">
+          <div class="sc-lbl">🔥 Flacără 1</div>
+          <select id="mo-flame1" style="background:var(--surface3);border:1px solid var(--border);border-radius:4px;color:var(--text);padding:4px 6px;font-size:12px;width:100%"
+            onchange="applyManualOverrides()">
+            <option value="">— MQTT live —</option>
+            <option value="false">Nu (fără foc)</option>
+            <option value="true">DA (foc detectat)</option>
+          </select>
+        </label>
+        <label class="scard" style="flex-direction:column;gap:4px">
+          <div class="sc-lbl">🔥 Flacără 2</div>
+          <select id="mo-flame2" style="background:var(--surface3);border:1px solid var(--border);border-radius:4px;color:var(--text);padding:4px 6px;font-size:12px;width:100%"
+            onchange="applyManualOverrides()">
+            <option value="">— MQTT live —</option>
+            <option value="false">Nu (fără foc)</option>
+            <option value="true">DA (foc detectat)</option>
+          </select>
+        </label>
+        <label class="scard" style="flex-direction:column;gap:4px">
+          <div class="sc-lbl" style="margin-bottom:6px">🚨 Simulare viteză depășită</div>
+          <div style="display:flex;gap:6px;align-items:center">
+            <input id="mo-speed-val" type="number" step="1" min="1" value="25"
+              style="background:var(--surface3);border:1px solid var(--border);border-radius:4px;color:var(--text);padding:4px 6px;font-size:12px;width:68px" />
+            <span style="font-size:11px;color:var(--muted)">km/h</span>
+          </div>
+          <button onclick="mockSpeedAlert()" style="margin-top:6px;width:100%;border:none;border-radius:6px;padding:6px 0;background:rgba(250,179,135,.15);color:var(--orange);border:1px solid rgba(250,179,135,.4);font-weight:700;font-size:11px;cursor:pointer">🚨 Declanșează alerta</button>
+        </label>
+      </div>
+      <button onclick="clearManualOverrides()" style="margin-top:12px;padding:5px 14px;border-radius:6px;border:1px solid var(--border);background:var(--surface3);color:var(--muted);cursor:pointer;font-size:12px">🗑 Resetează toate</button>
+    </div>
+  </div>
+
+  <!-- ROW 4: Diagnostics -->
+  <div class="diag">
+    <h3>🔬 Diagnostics</h3>
+    <div class="dg">
+      <div class="di"><div class="dlbl">Backend URL</div><div class="dval" style="color:var(--blue)">http://localhost:3000</div></div>
+      <div class="di" id="dbg-refresh"><div class="dlbl">Last refresh</div><div class="dval">—</div></div>
+      <div class="di" id="dbg-scans">  <div class="dlbl">QR scans sent</div><div class="dval">0</div></div>
+      <div class="di" id="dbg-errors"> <div class="dlbl">Errors</div><div class="dval">0</div></div>
+      <div class="di" id="dbg-sensors"><div class="dlbl">Camera mock events</div><div class="dval">0</div></div>
+    </div>
+  </div>
+
+</div><!-- /main -->
+
+<script>
+  const API = 'http://localhost:3000';
+
+  // state
+  let bySpot = {};
+  let scans = 0, errors = 0, sensorEvents = 0;
+
+  // clock
+  setInterval(() => {
+    document.getElementById('clock').textContent = new Date().toLocaleTimeString();
+  }, 1000);
+
+  function esc(s) {
+    return String(s)
+      .replace(/&/g,'&amp;').replace(/</g,'&lt;')
+      .replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+  }
+
+  // ── Logging ────────────────────────────────────────────────────────
+  function log(msg, cls = 'info') {
+    const el = document.getElementById('elog');
+    const d  = document.createElement('div');
+    d.className = 'le';
+    d.innerHTML = `<span class="lt">${new Date().toLocaleTimeString()}</span><span class="l${cls}">${esc(msg)}</span>`;
+    el.prepend(d);
+    while (el.children.length > 300) el.removeChild(el.lastChild);
+  }
+  function clearLog() { document.getElementById('elog').innerHTML = ''; }
+
+  // ── Pills ──────────────────────────────────────────────────────────
+  function pill(id, cls, txt) {
+    const el = document.getElementById(id);
+    el.className = `pill ${cls}`;
+    el.innerHTML = `<span class="dot"></span> ${txt}`;
+  }
+
+  // ── Diag ───────────────────────────────────────────────────────────
+  function diag(id, cls, lbl, val) {
+    const el = document.getElementById(id);
+    if (!el) return;
+    el.className = `di ${cls}`;
+    el.innerHTML = `<div class="dlbl">${lbl}</div><div class="dval">${val}</div>`;
+  }
+
+  // ── fmtDur ─────────────────────────────────────────────────────────
+  function fmtDur(since) {
+    const s = Math.floor((Date.now() - since) / 1000);
+    if (s < 60)   return `${s}s`;
+    if (s < 3600) return `${Math.floor(s/60)}m ${s%60}s`;
+    return `${Math.floor(s/3600)}h ${Math.floor((s%3600)/60)}m`;
+  }
+
+  // ── Refresh ────────────────────────────────────────────────────────
+  async function doRefresh() {
+    try {
+      const r = await fetch(`${API}/parking/admin-status`);
+      if (!r.ok) throw new Error(`HTTP ${r.status} ${r.statusText}`);
+      const d = await r.json();
+
+      pill('pill-api',  'ok', 'API ✓');
+      pill('pill-mqtt', d.mqttConnected ? 'ok' : 'err',
+           `MQTT ${d.mqttConnected ? '✓' : '✗ offline'}`);
+
+      const { total, available, occupied } = d.stats;
+      pill('pill-spots',
+        occupied === total && total > 0 ? 'err' : occupied > 0 ? 'warn' : 'ok',
+        `Spots ${available}/${total} free`);
+      pill('pill-sess',
+        d.activeSessions.length ? 'warn' : 'ok',
+        `Sessions: ${d.activeSessions.length}`);
+      pill('pill-users', 'idle', `Users: ${(d.users||[]).length}`);
+
+      bySpot = {};
+      d.activeSessions.forEach(s => { bySpot[s.spot.name] = s; });
+
+      renderSpots(d.spots);
+      renderSessions(d.activeSessions);
+      renderUsers(d.users || [], d.activeSessions);
+      renderSensors(d);
+
+      diag('dbg-refresh', 'ok', 'Last refresh', new Date().toLocaleTimeString());
+      if (!d.mqttConnected) log('MQTT broker not connected — check Docker', 'warn');
+    } catch(e) {
+      pill('pill-api', 'err', `API ✗ ${e.message}`);
+      diag('dbg-refresh', 'err', 'Last refresh', `FAILED: ${e.message}`);
+      log(`Refresh error: ${e.message}`, 'err');
+    }
+  }
+
+  // ── Camera ─────────────────────────────────────────────────────────
+  function connectCamera() {
+    const ip = document.getElementById('cam-ip').value.trim();
+    if (!ip) return;
+    const url = ip.startsWith('http') ? ip : `http://${ip}/stream`;
+    const img = document.getElementById('cam-feed');
+    const ph  = document.getElementById('cam-placeholder');
+    const st  = document.getElementById('cam-status');
+    img.src = url;
+    img.style.display = 'block';
+    ph.style.display  = 'none';
+    st.textContent    = `Conectat: ${url}`;
+    st.style.color    = 'var(--green)';
+    localStorage.setItem('cam-ip', ip);
+  }
+
+  function disconnectCamera() {
+    const img = document.getElementById('cam-feed');
+    const ph  = document.getElementById('cam-placeholder');
+    const st  = document.getElementById('cam-status');
+    img.src = '';
+    img.style.display = 'none';
+    ph.style.display  = '';
+    st.textContent    = 'Neconectat';
+    st.style.color    = 'var(--muted)';
+  }
+
+  function onCamError() {
+    const st = document.getElementById('cam-status');
+    st.textContent = 'Eroare — verifică IP și că ESP32-CAM e pornit';
+    st.style.color = 'var(--red)';
+  }
+
+  // Restore last cam IP from localStorage
+  (function() {
+    const saved = localStorage.getItem('cam-ip');
+    if (saved) document.getElementById('cam-ip').value = saved;
+    initFlameInvertButtons();
+  })();
+
+  // ── Render sensors ─────────────────────────────────────────────────
+  function setSensorCard(id, label, value, unit, warnFn) {
+    const card = document.getElementById('sc-' + id);
+    const val  = document.getElementById('sv-' + id);
+    if (!card || !val) return;
+    if (value === null || value === undefined) {
+      val.textContent = '—';
+      card.className = 'scard';
+      return;
+    }
+    val.textContent = value + (unit || '');
+    card.className = 'scard ' + (warnFn ? warnFn(value) : 'ok');
+  }
+
+  // ── Flame invert state (stored in localStorage) ───────────────────
+  const flameInvert = {
+    1: localStorage.getItem('flame-invert-1') === 'true',
+    2: localStorage.getItem('flame-invert-2') === 'true',
+  };
+
+  function toggleFlameInvert(n) {
+    flameInvert[n] = !flameInvert[n];
+    localStorage.setItem(`flame-invert-${n}`, flameInvert[n]);
+    const btn = document.getElementById(`btn-fi${n}`);
+    if (btn) {
+      btn.style.background = flameInvert[n] ? 'var(--yellow,#f59e0b)' : 'var(--surface3)';
+      btn.style.color = flameInvert[n] ? '#000' : 'var(--muted)';
+      btn.title = flameInvert[n] ? 'Logică inversată (activ)' : 'Inversează logică senzor';
+    }
+    applyManualOverrides(); // re-render cu noua logică
+  }
+
+  // Aplică starea vizuală a butoanelor invert la load
+  function initFlameInvertButtons() {
+    [1, 2].forEach(n => {
+      const btn = document.getElementById(`btn-fi${n}`);
+      if (!btn) return;
+      if (flameInvert[n]) {
+        btn.style.background = 'var(--yellow,#f59e0b)';
+        btn.style.color = '#000';
+        btn.title = 'Logică inversată (activ)';
+      }
+    });
+  }
+
+  // ── Manual override state ──────────────────────────────────────────
+  let _lastSensorData = {}; // ultima valoare MQTT
+
+  function toggleManualPanel() {
+    const body = document.getElementById('manual-panel-body');
+    const hint = document.getElementById('manual-ph-hint');
+    const open = body.style.display === 'none';
+    body.style.display = open ? '' : 'none';
+    if (hint) hint.textContent = open ? '▲ Restrânge' : '▼ Expandează';
+  }
+
+  function applyManualOverrides() {
+    // preia overrides din inputs
+    const mo = {
+      temp:   parseFloat(document.getElementById('mo-temp')?.value)  || null,
+      hum:    parseFloat(document.getElementById('mo-hum')?.value)   || null,
+      press:  parseFloat(document.getElementById('mo-press')?.value) || null,
+      gas1:   parseFloat(document.getElementById('mo-gas1')?.value)  || null,
+      gas2:   parseFloat(document.getElementById('mo-gas2')?.value)  || null,
+      flame1: document.getElementById('mo-flame1')?.value === '' ? null
+              : document.getElementById('mo-flame1')?.value === 'true',
+      flame2: document.getElementById('mo-flame2')?.value === '' ? null
+              : document.getElementById('mo-flame2')?.value === 'true',
+      speed:  null,
+    };
+    renderSensorsWithOverride(_lastSensorData, mo);
+  }
+
+  // ── Speed alert popup ──────────────────────────────────────────────
+  const SPEED_LIMIT_KMH = 10;
+  let _speedAlertShown = false;
+  let _speedAlertTimeout = null;
+
+  function checkSpeedAlert(kmh) {
+    if (kmh > SPEED_LIMIT_KMH) showSpeedAlert(kmh);
+  }
+
+  function showSpeedAlert(kmh) {
+    const overlay = document.getElementById('speed-alert-overlay');
+    if (!overlay) return;
+    document.getElementById('speed-alert-val').textContent = kmh.toFixed(1) + ' km/h';
+    document.getElementById('speed-alert-limit').textContent = SPEED_LIMIT_KMH + ' km/h';
+    document.getElementById('speed-alert-time').textContent = new Date().toLocaleTimeString();
+    overlay.style.display = 'flex';
+    log(`🚨 Viteză depășită: ${kmh.toFixed(1)} km/h (limita ${SPEED_LIMIT_KMH} km/h)`, 'err');
+    clearTimeout(_speedAlertTimeout);
+    _speedAlertTimeout = setTimeout(dismissSpeedAlert, 15000);
+  }
+
+  function dismissSpeedAlert() {
+    const overlay = document.getElementById('speed-alert-overlay');
+    if (overlay) overlay.style.display = 'none';
+    clearTimeout(_speedAlertTimeout);
+  }
+
+  function mockSpeedAlert() {
+    const val = parseFloat(document.getElementById('mo-speed-val')?.value) || 25;
+    showSpeedAlert(val);
+  }
+
+  function clearManualOverrides() {
+    ['mo-temp','mo-hum','mo-press','mo-gas1','mo-gas2'].forEach(id => {
+      const el = document.getElementById(id);
+      if (el) el.value = '';
+    });
+    ['mo-flame1','mo-flame2'].forEach(id => {
+      const el = document.getElementById(id);
+      if (el) el.value = '';
+    });
+    applyManualOverrides();
+  }
+
+  function renderSensors(d) {
+    _lastSensorData = d;
+    applyManualOverrides();
+  }
+
+  function renderSensorsWithOverride(d, mo) {
+    const env   = d.environment  || {};
+    const spd   = d.speed        || {};
+    const diags = d.diagnostics  || {};
+
+    // Valori MQTT cu fallback diagnostics
+    let temp   = env.temp       ?? diags.dht_temp    ?? null;
+    let hum    = env.humidity   ?? diags.dht_humidity ?? null;
+    // Filtrează -999 (BMP280 offline) și valori <= 0
+    let pressRaw = env.pressure ?? diags.bmp_pressure ?? null;
+    let press  = (pressRaw !== null && pressRaw > 0) ? pressRaw : null;
+    let gas1   = env.gas1       ?? diags.gas1_raw    ?? null;
+    let gas2   = env.gas2       ?? diags.gas2_raw    ?? null;
+    let rawF1  = env.flame1     !== undefined ? env.flame1   : (diags.flame1_detect ?? null);
+    let rawF2  = env.flame2     !== undefined ? env.flame2   : (diags.flame2_detect ?? null);
+    let kmh    = spd.speed_kmh  ?? null;
+
+    // Aplică overrides manuale
+    if (mo.temp   !== null) temp  = mo.temp;
+    if (mo.hum    !== null) hum   = mo.hum;
+    if (mo.press  !== null) press = mo.press;
+    if (mo.gas1   !== null) gas1  = mo.gas1;
+    if (mo.gas2   !== null) gas2  = mo.gas2;
+    if (mo.flame1 !== null) rawF1 = mo.flame1;
+    if (mo.flame2 !== null) rawF2 = mo.flame2;
+    if (mo.speed  !== null) kmh   = mo.speed;
+
+    // Aplică inversare flacără (fix pin flotant GPIO26)
+    const flame1 = (rawF1 !== null) ? (flameInvert[1] ? !rawF1 : rawF1) : null;
+    const flame2 = (rawF2 !== null) ? (flameInvert[2] ? !rawF2 : rawF2) : null;
+
+    setSensorCard('temp',  '🌡️ Temperatură', temp,  '°C',
+      v => v > 40 ? 'err' : v > 30 ? 'warn' : 'ok');
+    setSensorCard('hum',   '💧 Umiditate',   hum,   '%',
+      v => v > 80 ? 'warn' : 'ok');
+    setSensorCard('press', '📊 Presiune',    press !== null ? Math.round(press) : null, ' hPa',
+      () => 'ok');
+    setSensorCard('gas1',  '💨 Gaz 1',       gas1,  '',
+      v => v > 700 ? 'err' : v > 400 ? 'warn' : 'ok');
+    setSensorCard('gas2',  '💨 Gaz 2',       gas2,  '',
+      v => v > 700 ? 'err' : v > 400 ? 'warn' : 'ok');
+
+    // Flacără: boolean → text
+    if (flame1 !== null) {
+      const card1 = document.getElementById('sc-flame1');
+      const val1  = document.getElementById('sv-flame1');
+      if (card1 && val1) {
+        val1.textContent = flame1 ? '⚠️ DA' : 'Nu';
+        card1.className = 'scard ' + (flame1 ? 'err' : 'ok');
+      }
+    }
+    if (flame2 !== null) {
+      const card2 = document.getElementById('sc-flame2');
+      const val2  = document.getElementById('sv-flame2');
+      if (card2 && val2) {
+        val2.textContent = flame2 ? '⚠️ DA' : 'Nu';
+        card2.className = 'scard ' + (flame2 ? 'err' : 'ok');
+      }
+    }
+
+    setSensorCard('speed', '🚗 Viteză IR', kmh !== null ? kmh.toFixed(1) : null, ' km/h',
+      v => v > 20 ? 'warn' : 'ok');
+
+    if (kmh !== null) checkSpeedAlert(kmh);
+
+    const hasAny = [temp, hum, press, gas1, gas2, flame1, flame2].some(v => v !== null);
+    const lbl = document.getElementById('sensor-updated');
+    if (lbl) lbl.textContent = hasAny
+      ? `Actualizat: ${new Date().toLocaleTimeString()}`
+      : 'Nicio dată primită încă';
+  }
+
+  // ── Render spots ───────────────────────────────────────────────────
+  function makeSpotCard(s) {
+    const sess  = bySpot[s.name];
+    const user  = sess ? sess.user.email.split('@')[0] : '';
+    const sn    = esc(s.name);
+    const st    = s.status || 'available';
+    const lbl   = st === 'available' ? '✓ Liber' : st === 'reserved' ? '🔵 Rezervat' : '🔴 Ocupat';
+    return `<div class="spot-card ${st}" style="flex:1;min-width:90px">
+      <div class="spot-name">${sn}</div>
+      <div class="spot-lbl">${lbl}</div>
+      ${user ? `<div class="spot-user">${esc(user)}</div>` : '<div class="spot-user" style="height:14px"></div>'}
+      <div class="spot-btns">
+        <button class="snr-btn snr-occ" onclick="mockSensor('${sn}','occupied')" title="Simulate car in">🚗 In</button>
+        <button class="snr-btn snr-avl" onclick="mockSensor('${sn}','available')" title="Simulate car out">✓ Out</button>
+      </div>
+    </div>`;
+  }
+
+  function renderSpots(spots) {
+    const g = document.getElementById('spots-grid');
+    if (!spots?.length) {
+      g.innerHTML = '<p style="color:var(--muted)">No spots configured.</p>';
+      return;
+    }
+    const rowA = spots.filter(s => s.name.startsWith('A')).sort((a,b) => a.name.localeCompare(b.name));
+    const rowB = spots.filter(s => s.name.startsWith('B')).sort((a,b) => a.name.localeCompare(b.name));
+    const other = spots.filter(s => !s.name.startsWith('A') && !s.name.startsWith('B'));
+
+    if (rowA.length && rowB.length) {
+      g.innerHTML = `
+        <div class="spots-map">
+          <div class="road-divider">🚗 · · · DRUM · · · 🚗</div>
+          <div class="spots-row"><div class="spots-row-label">A</div>${rowA.map(makeSpotCard).join('')}</div>
+          <div class="spots-row"><div class="spots-row-label">B</div>${rowB.map(makeSpotCard).join('')}</div>
+          <div class="road-divider">🚗 · · · DRUM · · · 🚗</div>
+          ${other.length ? '<div class="spots-row">' + other.map(makeSpotCard).join('') + '</div>' : ''}
+        </div>`;
+    } else {
+      g.innerHTML = `<div style="display:flex;flex-wrap:wrap;gap:10px">${spots.map(makeSpotCard).join('')}</div>`;
+    }
+  }
+
+  // ── Render sessions ────────────────────────────────────────────────
+  function renderSessions(sessions) {
+    const w = document.getElementById('sess-wrap');
+    if (!sessions.length) { w.innerHTML = '<p class="empty">No active sessions</p>'; return; }
+    w.innerHTML = `
+      <table class="sess-table">
+        <thead><tr><th>Email</th><th>Spot</th><th>Duration</th><th>Car</th></tr></thead>
+        <tbody>${sessions.map(s => `
+          <tr>
+            <td class="ems" title="${esc(s.user.email)}">${esc(s.user.email)}</td>
+            <td><span class="spill">${esc(s.spot.name)}</span></td>
+            <td class="dur">${fmtDur(new Date(s.startTime))}</td>
+            <td style="font-size:12px;color:var(--sub)">${esc(s.user.carColor||'—')}</td>
+          </tr>`).join('')}
+        </tbody>
+      </table>`;
+  }
+
+  // ── Render users (mock scan panel) ─────────────────────────────────
+  function renderUsers(users, activeSessions) {
+    const g = document.getElementById('user-grid');
+    if (!users.length) {
+      g.innerHTML = '<p style="color:var(--muted);font-size:12px">No users found.</p>';
+      return;
+    }
+    const activeEmails = new Set(activeSessions.map(s => s.user.email));
+    g.innerHTML = users.map(u => {
+      const parked   = activeEmails.has(u.email);
+      const hasQr    = !!u.qrCode;
+      const qrSafe   = esc(u.qrCode || '');
+      const emailSafe= esc(u.email);
+      const qrShort  = u.qrCode ? u.qrCode.slice(0,18) + '…' : '(no QR)';
+      return `
+        <div class="user-card">
+          <div class="user-email" title="${emailSafe}">${emailSafe}</div>
+          <div class="user-role">${esc(u.role || 'user')}</div>
+          <div class="user-qr"   title="${qrSafe}">QR: ${esc(qrShort)}</div>
+          <div class="user-status ${parked ? 'parked' : 'free'}">
+            ${parked ? '⬤ Currently parked' : '✓ Not parked'}
+          </div>
+          <div class="user-actions">
+            <button class="scan-btn entry-btn"
+              ${(!hasQr || parked) ? 'disabled' : `onclick="mockScan('${qrSafe}','${emailSafe}')"`}
+              title="${parked ? 'Already parked' : 'Simulate entry scan'}">
+              ↪ Entry
+            </button>
+            <button class="scan-btn exit-btn"
+              ${!parked ? 'disabled' : `onclick="exitByCamera('${emailSafe}')"`}
+              title="${!parked ? 'No active session' : 'Camera detected — trigger exit & open barrier'}">
+              📷 Exit barieră
+            </button>
+          </div>
+        </div>`;
+    }).join('');
+  }
+
+  // ── Mock sensor ────────────────────────────────────────────────────
+  async function mockSensor(spotName, status) {
+    log(`[SENSOR] Simulating ${spotName} → ${status}`, 'sensor');
+    sensorEvents++;
+    diag('dbg-sensors', '', 'Sensor mock events', sensorEvents);
+    try {
+      const r = await fetch(`${API}/parking/mock-sensor`, {
+        method:'POST',
+        headers:{'Content-Type':'application/json'},
+        body: JSON.stringify({ spotName, status }),
+      });
+      const d = await r.json();
+      if (d.ok) {
+        log(`[SENSOR ✓] ${spotName} → ${status}  |  published to parking/sensor/${spotName} via MQTT`, 'sensor');
+      } else {
+        log(`[SENSOR ✗] ${JSON.stringify(d)}`, 'err');
+        errors++;
+        diag('dbg-errors', 'err', 'Errors', errors);
+      }
+    } catch(e) {
+      log(`[SENSOR ✗] ${e.message}`, 'err');
+      errors++;
+      diag('dbg-errors', 'err', 'Errors', errors);
+    }
+    setTimeout(doRefresh, 600);
+  }
+
+  // ── Mock user scan ─────────────────────────────────────────────────
+  async function mockScan(qr, email) {
+    log(`[MOCK SCAN] Sending QR for ${email}`, 'scan');
+    await processScan(qr);
+  }
+
+  // ── Camera-triggered exit (new flow: no QR needed at exit) ─────────
+  async function exitByCamera(email) {
+    log(`[CAMERA EXIT] Detected vehicle for ${email} — triggering exit`, 'scan');
+    scans++;
+    diag('dbg-scans', '', 'QR scans sent', scans);
+    const badge  = document.getElementById('lbadge');
+    const detail = document.getElementById('last-detail');
+    badge.className  = 'sbadge b-idle';
+    badge.textContent = '⏳ Camera exit…';
+    detail.textContent = `Camera exit for ${email}`;
+    try {
+      const r = await fetch(`${API}/parking/exit`, {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({ email }),
+      });
+      const d = await r.json();
+      if (d.action === 'exit') {
+        badge.className  = 'sbadge b-ok';
+        badge.textContent = `✓ EXIT → ${d.spotName} freed`;
+        detail.textContent = `${email} exited — ${d.durationMinutes}min — ${d.totalCost?.toFixed(2)} RON`;
+        log(`[✓] CAMERA EXIT → ${d.spotName} freed | ${d.durationMinutes}min | ${d.totalCost?.toFixed(2)} RON | MQTT OPEN_EXIT sent`, 'ok');
+      } else {
+        badge.className  = 'sbadge b-err';
+        badge.textContent = `✗ ${d.statusCode ?? 'Error'}`;
+        detail.textContent = `${d.message ?? JSON.stringify(d)}`;
+        log(`[✗] Camera exit failed: ${d.message ?? JSON.stringify(d)}`, 'err');
+        errors++;
+        diag('dbg-errors', 'err', 'Errors', errors);
+      }
+    } catch(e) {
+      badge.className  = 'sbadge b-err';
+      badge.textContent = '✗ Network error';
+      detail.textContent = e.message;
+      log(`[✗] Camera exit network error: ${e.message}`, 'err');
+      errors++;
+      diag('dbg-errors', 'err', 'Errors', errors);
+    }
+    setTimeout(doRefresh, 700);
+  }
+
+  // ── Physical scanner input ─────────────────────────────────────────
+  const scannerEl = document.getElementById('scanner-input');
+  const fdotEl    = document.getElementById('fdot');
+  const flabelEl  = document.getElementById('flabel');
+  const fbarEl    = document.getElementById('focus-bar');
+  const bufEl     = document.getElementById('buf');
+
+  function activateScanner() { scannerEl.focus(); }
+
+  scannerEl.addEventListener('focus', () => {
+    fdotEl.className  = 'fdot on';
+    flabelEl.textContent = '🟢 ACTIVE — point GM65 at a QR code now';
+    fbarEl.classList.add('active');
+    log('GM65 scanner activated', 'info');
+  });
+  scannerEl.addEventListener('blur', () => {
+    fdotEl.className  = 'fdot off';
+    flabelEl.textContent = '🔴 INACTIVE — click here to activate';
+    fbarEl.classList.remove('active');
+  });
+  scannerEl.addEventListener('input', () => {
+    bufEl.textContent = scannerEl.value ? `buffering: ${scannerEl.value}` : '—';
+  });
+  scannerEl.addEventListener('keydown', async e => {
+    if (e.key === 'Enter') {
+      const qr = scannerEl.value.trim();
+      scannerEl.value = '';
+      bufEl.textContent = '—';
+      if (qr) await processScan(qr);
+    }
+  });
+
+  // Auto-capture keystrokes if no input is active
+  document.addEventListener('keydown', e => {
+    const tag = document.activeElement?.tagName;
+    if (tag === 'INPUT' || tag === 'TEXTAREA') return;
+    if (e.key.length === 1 && !e.ctrlKey && !e.metaKey) {
+      scannerEl.focus();
+      scannerEl.value += e.key;
+      bufEl.textContent = `buffering: ${scannerEl.value}`;
+      e.preventDefault();
+    }
+  });
+
+  // Manual input
+  const manualEl = document.getElementById('manual-input');
+  manualEl.addEventListener('keydown', async e => {
+    if (e.key === 'Enter') {
+      const qr = manualEl.value.trim(); manualEl.value = '';
+      if (qr) { log(`[MANUAL] ${qr}`, 'info'); await processScan(qr); }
+    }
+  });
+  function manualSend() {
+    const qr = manualEl.value.trim(); manualEl.value = '';
+    if (qr) { log(`[MANUAL] ${qr}`, 'info'); processScan(qr); }
+  }
+
+  // ── Core: send scan to backend ─────────────────────────────────────
+  async function processScan(qr) {
+    const badge  = document.getElementById('lbadge');
+    const detail = document.getElementById('last-detail');
+    badge.className  = 'sbadge b-idle';
+    badge.textContent = '⏳ Sending…';
+    detail.textContent = qr;
+    log(`[SCAN] ${qr}`, 'scan');
+    scans++;
+    diag('dbg-scans', '', 'QR scans sent', scans);
+
+    try {
+      const r = await fetch(`${API}/parking/hardware-scan`, {
+        method:'POST',
+        headers:{'Content-Type':'application/json'},
+        body: JSON.stringify({ qrCode: qr }),
+      });
+      const d = await r.json();
+
+      if (d.action === 'entrance') {
+        const spot = d.session?.spot?.name ?? '?';
+        badge.className  = 'sbadge b-ok';
+        badge.textContent = `✓ ENTRY → ${spot}`;
+        detail.textContent = `Spot ${spot} assigned — QR: ${qr}`;
+        log(`[✓] ENTRY → Spot ${spot}  |  MQTT OPEN_ENTRY published to ESP32`, 'ok');
+      } else if (d.action === 'exit') {
+        const spot = d.session?.spot?.name ?? '?';
+        badge.className  = 'sbadge b-ok';
+        badge.textContent = `✓ EXIT → ${spot} freed`;
+        detail.textContent = `Spot ${spot} freed — QR: ${qr}`;
+        log(`[✓] EXIT → Spot ${spot} freed  |  MQTT OPEN_EXIT published to ESP32`, 'ok');
+      } else if (d.statusCode || d.error) {
+        badge.className  = 'sbadge b-err';
+        badge.textContent = `✗ ${d.statusCode ?? 'Error'}`;
+        detail.textContent = `${d.message ?? JSON.stringify(d)}  (QR: ${qr})`;
+        log(`[✗] ${d.statusCode} — ${d.message}`, 'err');
+        errors++;
+        diag('dbg-errors', 'err', 'Errors', errors);
+      } else {
+        badge.className  = 'sbadge b-err';
+        badge.textContent = '✗ Unexpected';
+        detail.textContent = JSON.stringify(d);
+        log(`[?] Unexpected response: ${JSON.stringify(d)}`, 'warn');
+      }
+    } catch(e) {
+      badge.className  = 'sbadge b-err';
+      badge.textContent = '✗ Network error';
+      detail.textContent = e.message;
+      log(`[✗] Network: ${e.message}`, 'err');
+      errors++;
+      diag('dbg-errors', 'err', 'Errors', errors);
+    }
+
+    setTimeout(doRefresh, 700);
+  }
+
+  // ── MQTT Log ───────────────────────────────────────────────────────
+  async function fetchMqttLog() {
+    try {
+      const r = await fetch(`${API}/parking/mqtt-log`);
+      if (!r.ok) return;
+      const d = await r.json();
+      renderMqttLog(d.log || []);
+    } catch(e) { /* silent */ }
+  }
+
+  function renderMqttLog(entries) {
+    const el = document.getElementById('mqtt-log');
+    if (!entries.length) return;
+    el.innerHTML = entries.map(e => {
+      const isIn  = e.direction === 'in';
+      const dir   = isIn ? '← IN ' : '→ OUT';
+      const cls   = isIn ? 'ml-in' : 'ml-out';
+      const t     = new Date(e.time).toLocaleTimeString();
+      const pay   = e.payload.length > 90 ? e.payload.slice(0, 90) + '…' : e.payload;
+      return `<div class="ml">
+        <span class="ml-time">${esc(t)}</span>
+        <span class="${cls}">${dir}</span>
+        <span class="ml-topic">${esc(e.topic)}</span>
+        <span class="ml-payload">${esc(pay)}</span>
+      </div>`;
+    }).join('');
+  }
+
+  function clearMqttLog() { document.getElementById('mqtt-log').innerHTML = ''; }
+
+  // ── Boot ───────────────────────────────────────────────────────────
+  log('Dashboard loaded. Connecting to http://localhost:3000…', 'info');
+  doRefresh();
+  setInterval(doRefresh, 3000);
+  fetchMqttLog();
+  setInterval(fetchMqttLog, 2000);
+  setTimeout(activateScanner, 400);
+</script>
+</body>
+</html>

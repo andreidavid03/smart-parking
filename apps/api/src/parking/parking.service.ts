@@ -245,4 +245,158 @@ export class ParkingService {
       qrCode: user.qrCode,
     };
   }
+
+  async getLastSession(email: string) {
+    const user = await this.prisma.user.findUnique({
+      where: { email },
+      include: {
+        sessions: {
+          orderBy: { startTime: 'desc' },
+          take: 1,
+          include: { spot: true },
+        },
+      },
+    });
+
+    if (!user) throw new NotFoundException('User not found');
+
+    const session = user.sessions[0] ?? null;
+    if (!session) {
+      return {
+        session: null,
+        durationMinutes: null,
+        costPerHour: 5.0,
+        totalCost: null,
+      };
+    }
+
+    const durationMinutes = session.endTime
+      ? Math.round(
+          (session.endTime.getTime() - session.startTime.getTime()) / 60000,
+        )
+      : null;
+
+    const config = await this.prisma.parkingConfig.findFirst();
+    const costPerHour = config?.parkingCostPerHour ?? 5.0;
+    const totalCost =
+      durationMinutes != null
+        ? Math.round((durationMinutes / 60) * costPerHour * 100) / 100
+        : null;
+
+    return { session, durationMinutes, costPerHour, totalCost };
+  }
+
+  async getSpotByName(name: string) {
+    return this.prisma.spot.findUnique({ where: { name } });
+  }
+
+  async getAdminStatus() {
+    const [spots, activeSessions, users] = await Promise.all([
+      this.prisma.spot.findMany({ orderBy: { name: 'asc' } }),
+      this.prisma.session.findMany({
+        where: { endTime: null },
+        include: {
+          user: { select: { email: true, carColor: true } },
+          spot: { select: { name: true } },
+        },
+        orderBy: { startTime: 'desc' },
+      }),
+      this.prisma.user.findMany({
+        select: { email: true, qrCode: true, role: true },
+        orderBy: { email: 'asc' },
+      }),
+    ]);
+
+    const total = spots.length;
+    const available = spots.filter((s) => s.status === 'available').length;
+
+    return {
+      apiStatus: 'ok',
+      spots,
+      activeSessions,
+      users,
+      stats: { total, available, occupied: total - available },
+    };
+  }
+
+  async exitSession(email: string) {
+    const user = await this.prisma.user.findUnique({
+      where: { email },
+      include: {
+        sessions: {
+          where: { endTime: null },
+          orderBy: { startTime: 'desc' },
+          take: 1,
+          include: { spot: true },
+        },
+      },
+    });
+
+    if (!user) throw new NotFoundException('User not found');
+
+    const active = user.sessions[0];
+    if (!active) throw new BadRequestException('No active session');
+
+    await this.prisma.session.update({
+      where: { id: active.id },
+      data: { endTime: new Date() },
+    });
+
+    await this.prisma.spot.update({
+      where: { id: active.spotId },
+      data: { status: 'available' },
+    });
+
+    const config = await this.prisma.parkingConfig.findFirst();
+    const costPerHour = config?.parkingCostPerHour ?? 5.0;
+    const durationMinutes = Math.round(
+      (Date.now() - active.startTime.getTime()) / 60000,
+    );
+    const totalCost =
+      Math.round((durationMinutes / 60) * costPerHour * 100) / 100;
+
+    return {
+      action: 'exit',
+      spotName: (active as any).spot?.name ?? '',
+      sessionId: active.id,
+      durationMinutes,
+      costPerHour,
+      totalCost,
+    };
+  }
+
+  async getSessionHistory(email: string) {
+    const user = await this.prisma.user.findUnique({
+      where: { email },
+      include: {
+        sessions: {
+          where: { endTime: { not: null } },
+          orderBy: { startTime: 'desc' },
+          include: { spot: true },
+        },
+      },
+    });
+
+    if (!user) throw new NotFoundException('User not found');
+
+    const config = await this.prisma.parkingConfig.findFirst();
+    const costPerHour = config?.parkingCostPerHour ?? 5.0;
+
+    return user.sessions.map((s) => {
+      const durationMinutes = Math.round(
+        (s.endTime!.getTime() - s.startTime.getTime()) / 60000,
+      );
+      const totalCost =
+        Math.round((durationMinutes / 60) * costPerHour * 100) / 100;
+      return {
+        id: s.id,
+        spotName: (s as any).spot?.name ?? '',
+        startTime: s.startTime,
+        endTime: s.endTime,
+        durationMinutes,
+        costPerHour,
+        totalCost,
+      };
+    });
+  }
 }

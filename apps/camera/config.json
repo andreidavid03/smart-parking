@@ -1,0 +1,38 @@
+{
+  "_comment": "Camera-based spot detection configuration.",
+  "_instructions": [
+    "Run calibrate.py once to draw ROIs interactively, then paste the output here.",
+    "Each spot needs a bounding box [x, y, width, height] in pixels for your camera resolution.",
+    "occupancy_threshold: fraction of ROI pixels that must be 'foreground' to call it occupied (0.0-1.0).",
+    "The defaults below are placeholders — run calibrate.py to get real values."
+  ],
+
+  "mqtt": {
+    "broker": "192.168.1.186",
+    "port": 1883,
+    "topic_prefix": "parking/sensor"
+  },
+
+  "camera": {
+    "source": "http://192.168.1.189/stream",
+    "width": 1280,
+    "height": 720,
+    "fps": 1,
+    "warmup_frames": 30
+  },
+
+  "detection": {
+    "method": "background_subtraction",
+    "occupancy_threshold": 0.15,
+    "min_area": 500,
+    "debounce_frames": 3
+  },
+
+  "spots": [
+    { "name": "A1", "roi": [20,  50, 180, 160] },
+    { "name": "A2", "roi": [220, 50, 180, 160] },
+    { "name": "A3", "roi": [420, 50, 180, 160] },
+    { "name": "A4", "roi": [620, 50, 180, 160] },
+    { "name": "A5", "roi": [820, 50, 180, 160] }
+  ]
+}

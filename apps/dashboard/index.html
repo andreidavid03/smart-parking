@@ -1,0 +1,841 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Smart Parking — Dashboard</title>
+  <script src="https://unpkg.com/mqtt/dist/mqtt.min.js"></script>
+  <style>
+    :root {
+      --green:  #22c55e;
+      --red:    #ef4444;
+      --orange: #f97316;
+      --blue:   #3b82f6;
+      --bg:     #0f172a;
+      --card:   #1e293b;
+      --border: #334155;
+      --text:   #e2e8f0;
+      --muted:  #94a3b8;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { background: var(--bg); color: var(--text); font-family: system-ui, sans-serif; font-size: 14px; }
+
+    /* header */
+    header { background: var(--card); border-bottom: 1px solid var(--border); padding: 10px 20px; display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+    .logo { font-size: 17px; font-weight: 800; color: var(--orange); }
+    .pills { display: flex; gap: 6px; flex-wrap: wrap; }
+    .pill { display: flex; align-items: center; gap: 5px; background: var(--bg); border: 1px solid var(--border); border-radius: 20px; padding: 3px 10px; font-size: 11px; color: var(--muted); }
+    .dot { width: 7px; height: 7px; border-radius: 50%; background: var(--muted); }
+    .dot.ok  { background: var(--green); }
+    .dot.err { background: var(--red); }
+    .ip-row { margin-left: auto; display: flex; gap: 6px; align-items: center; }
+    .ip-row label { font-size: 11px; color: var(--muted); }
+    .ip-row input { background: var(--bg); border: 1px solid var(--border); color: var(--text); padding: 4px 8px; border-radius: 6px; font-size: 12px; width: 150px; }
+    .btn-sm { background: var(--orange); color: #fff; border: none; border-radius: 6px; padding: 4px 12px; cursor: pointer; font-size: 11px; font-weight: 600; }
+
+    /* layout */
+    .page { padding: 14px; display: flex; flex-direction: column; gap: 14px; }
+    .card { background: var(--card); border: 1px solid var(--border); border-radius: 10px; overflow: hidden; }
+    .card-head { padding: 9px 14px; border-bottom: 1px solid var(--border); display: flex; align-items: center; justify-content: space-between; }
+    .card-head h2 { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .07em; color: var(--muted); }
+    .card-body { padding: 14px; }
+
+    /* barrier */
+    .barrier-row { display: flex; gap: 12px; align-items: stretch; }
+    .barrier-btn { flex: 1; padding: 16px 20px; border: none; border-radius: 8px; font-size: 15px; font-weight: 700; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 10px; transition: opacity .15s, transform .1s; }
+    .barrier-btn:active { transform: scale(.97); }
+    .barrier-btn:hover { opacity: .88; }
+    .barrier-entry { background: var(--green); color: #fff; }
+    .barrier-exit  { background: var(--orange); color: #fff; }
+    .barrier-stats { display: flex; flex-direction: column; justify-content: center; gap: 6px; background: var(--bg); border: 1px solid var(--border); border-radius: 8px; padding: 12px 20px; min-width: 140px; }
+    .bstat { display: flex; align-items: center; gap: 8px; }
+    .bstat .bval { font-size: 22px; font-weight: 800; min-width: 32px; }
+    .bstat .blbl { color: var(--muted); font-size: 11px; }
+    .bstat.free .bval { color: var(--green); }
+    .bstat.occ  .bval { color: var(--red); }
+
+    /* main grid */
+    .main-grid { display: grid; grid-template-columns: 1fr 360px; gap: 14px; }
+    @media (max-width: 860px) { .main-grid { grid-template-columns: 1fr; } }
+    .left-col  { display: flex; flex-direction: column; gap: 14px; }
+    .right-col { display: flex; flex-direction: column; gap: 14px; }
+
+    /* spots */
+    .lot { display: flex; flex-direction: column; gap: 5px; }
+    .lot-zone { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: .08em; color: var(--muted); }
+    .lot-row { display: flex; gap: 5px; flex-wrap: wrap; }
+    .spot { width: 54px; height: 46px; border-radius: 6px; border: 1px solid var(--border); display: flex; flex-direction: column; align-items: center; justify-content: center; cursor: pointer; transition: transform .15s; user-select: none; gap: 1px; }
+    .spot:hover { transform: scale(1.06); }
+    .spot .sn { font-size: 12px; font-weight: 700; }
+    .spot .ss { font-size: 9px; text-transform: uppercase; letter-spacing: .04em; opacity: .75; }
+    .spot.available { background: rgba(34,197,94,.13); border-color: var(--green); color: var(--green); }
+    .spot.occupied  { background: rgba(239,68,68,.13);  border-color: var(--red);   color: var(--red); }
+    .spot.unknown   { background: var(--bg); color: var(--muted); }
+    .led-strip { height: 12px; display: flex; gap: 3px; padding: 0 3px; align-items: center; background: var(--bg); border: 1px solid var(--border); border-radius: 4px; }
+    .led-col { display: flex; flex: 1; gap: 2px; justify-content: center; }
+    .led { width: 8px; height: 8px; border-radius: 50%; background: var(--green); transition: background .3s; }
+    .led.red { background: var(--red); }
+
+    /* camera */
+    .cam-wrap { position: relative; width: 100%; aspect-ratio: 4/3; background: #000; border-radius: 8px; overflow: hidden; display: flex; align-items: center; justify-content: center; }
+    .cam-wrap img { width: 100%; height: 100%; object-fit: contain; display: none; }
+    .cam-wrap img.on { display: block; }
+    .cam-ph { text-align: center; color: var(--muted); }
+    .cam-ph svg { opacity: .25; }
+    .cam-ph p { margin-top: 6px; font-size: 11px; }
+    .live-tag { position: absolute; top: 8px; left: 8px; background: var(--red); color: #fff; font-size: 9px; font-weight: 800; padding: 2px 7px; border-radius: 4px; letter-spacing: .1em; display: none; }
+    .live-tag.on { display: block; }
+    .cam-ctrl { display: flex; gap: 6px; margin-top: 8px; }
+    .cam-ctrl input { flex: 1; background: var(--bg); border: 1px solid var(--border); color: var(--text); padding: 5px 8px; border-radius: 6px; font-size: 12px; }
+    .bcam { padding: 5px 12px; border-radius: 6px; font-size: 11px; font-weight: 600; cursor: pointer; border: 1px solid var(--border); background: var(--bg); color: var(--text); }
+    .bcam.go { background: var(--blue); color: #fff; border-color: var(--blue); }
+    .bcam.go:hover { opacity: .85; }
+    .bcam:not(.go):hover { border-color: var(--red); color: var(--red); }
+
+    /* event log */
+    .event-log { height: 280px; overflow-y: auto; background: #0a0e1a; border-radius: 8px; font-family: monospace; font-size: 11px; display: flex; flex-direction: column; gap: 2px; padding: 6px; }
+    .ev { display: grid; grid-template-columns: 52px 18px 1fr; gap: 6px; padding: 3px 6px; border-radius: 4px; align-items: start; }
+    .ev.sensor  { background: rgba(34,197,94,.07); }
+    .ev.command { background: rgba(249,115,22,.07); }
+    .ev.qr      { background: rgba(59,130,246,.07); }
+    .ev .et { color: var(--muted); font-size: 10px; padding-top: 1px; }
+    .ev .ec { color: var(--text); word-break: break-all; }
+    .ev .etopic { font-weight: 700; }
+    .ev.sensor  .etopic { color: var(--green); }
+    .ev.command .etopic { color: var(--orange); }
+    .ev.qr      .etopic { color: var(--blue); }
+    ::-webkit-scrollbar { width: 5px; }
+    ::-webkit-scrollbar-track { background: transparent; }
+    ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+
+    /* environment sensors */
+    .env-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+    .env-tile { background: var(--bg); border: 1px solid var(--border); border-radius: 8px; padding: 10px 12px; display: flex; flex-direction: column; gap: 3px; }
+    .env-tile .env-label { font-size: 9px; text-transform: uppercase; letter-spacing: .08em; color: var(--muted); }
+    .env-tile .env-val { font-size: 20px; font-weight: 800; color: var(--text); }
+    .env-tile .env-unit { font-size: 10px; color: var(--muted); }
+    .env-tile.alert { border-color: var(--red); background: rgba(239,68,68,.08); }
+    .env-tile.alert .env-val { color: var(--red); }
+    .env-updated { font-size: 10px; color: var(--muted); margin-top: 6px; text-align: right; }
+    .env-no-data { color: var(--muted); font-size: 12px; padding: 10px 0; text-align: center; }
+
+    /* sensor diagnostics panel */
+    .diag-table { width: 100%; border-collapse: collapse; font-size: 12px; }
+    .diag-table th { text-align: left; padding: 5px 8px; font-size: 9px; text-transform: uppercase; letter-spacing: .07em; color: var(--muted); border-bottom: 1px solid var(--border); }
+    .diag-table td { padding: 6px 8px; border-bottom: 1px solid rgba(255,255,255,.04); vertical-align: middle; }
+    .diag-table tr:last-child td { border-bottom: none; }
+    .diag-status { display: inline-flex; align-items: center; gap: 5px; }
+    .diag-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
+    .diag-dot.ok  { background: var(--green); box-shadow: 0 0 4px var(--green); }
+    .diag-dot.err { background: var(--red);   box-shadow: 0 0 4px var(--red); }
+    .diag-dot.wait { background: var(--muted); }
+    .diag-raw { font-family: monospace; font-size: 11px; color: var(--muted); }
+    .diag-val { font-weight: 700; color: var(--text); min-width: 60px; display: inline-block; }
+    .diag-alert td { background: rgba(239,68,68,.06); }
+    .diag-no-data { color: var(--muted); font-size: 12px; padding: 12px 0; text-align: center; }
+    .diag-test-btn { background: var(--orange); color: #fff; border: none; border-radius: 6px; padding: 4px 10px; font-size: 11px; font-weight: 600; cursor: pointer; margin-left: 6px; }
+    .diag-test-btn:hover { opacity: .85; }
+
+    /* users panel */
+    .users-grid { display: flex; flex-wrap: wrap; gap: 10px; }
+    .user-card { background: var(--bg); border: 1px solid var(--border); border-radius: 8px; padding: 10px 14px; display: flex; align-items: center; gap: 12px; min-width: 260px; flex: 1 1 260px; }
+    .user-card.active { border-color: var(--orange); }
+    .user-avatar { width: 36px; height: 36px; border-radius: 50%; background: var(--border); display: flex; align-items: center; justify-content: center; font-size: 16px; flex-shrink: 0; }
+    .user-info { flex: 1; overflow: hidden; }
+    .user-email { font-size: 12px; font-weight: 700; color: var(--text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .user-meta { font-size: 10px; color: var(--muted); margin-top: 2px; }
+    .user-spot { color: var(--orange); font-weight: 700; }
+    .user-actions { display: flex; flex-direction: column; gap: 5px; flex-shrink: 0; }
+    .ubtn { border: none; border-radius: 6px; padding: 5px 12px; font-size: 11px; font-weight: 700; cursor: pointer; white-space: nowrap; }
+    .ubtn.entry { background: var(--green); color: #fff; }
+    .ubtn.exit  { background: var(--orange); color: #fff; }
+    .ubtn:hover { opacity: .85; }
+    .no-users { color: var(--muted); font-size: 13px; padding: 8px 0; }
+  </style>
+</head>
+<body>
+
+<header>
+  <span class="logo">&#x1F17F; Smart Parking</span>
+  <div class="pills">
+    <div class="pill"><div class="dot" id="dot-api"></div><span id="lbl-api">API&hellip;</span></div>
+    <div class="pill"><div class="dot" id="dot-mqtt"></div><span id="lbl-mqtt">MQTT&hellip;</span></div>
+    <div class="pill"><div class="dot ok"></div><span id="lbl-ts">&mdash;</span></div>
+  </div>
+  <div class="ip-row">
+    <label>API IP</label>
+    <input id="api-ip" value="192.168.1.186" placeholder="192.168.1.186">
+    <button class="btn-sm" onclick="applySettings()">Apply</button>
+  </div>
+</header>
+
+<div class="page">
+
+  <!-- Users & Sessions -->
+  <div class="card">
+    <div class="card-head">
+      <h2>Users &amp; Sessions</h2>
+      <span id="users-lbl" style="font-size:11px;color:var(--muted)">Loading&hellip;</span>
+    </div>
+    <div class="card-body">
+      <div class="users-grid" id="users-grid"><span class="no-users">Loading users&hellip;</span></div>
+    </div>
+  </div>
+
+  <!-- Barrier -->
+  <div class="card">
+    <div class="card-head">
+      <h2>Barrier Access</h2>
+      <span id="ws-lbl" style="font-size:11px;color:var(--muted)">WS: connecting&hellip;</span>
+    </div>
+    <div class="card-body">
+      <div class="barrier-row">
+        <button class="barrier-btn barrier-entry" onclick="barrierEntry()">
+          &#x1F7E2;&nbsp; OPEN ENTRY
+        </button>
+        <button class="barrier-btn barrier-exit" onclick="barrierExit()">
+          &#x1F513;&nbsp; OPEN EXIT
+        </button>
+        <div class="barrier-stats">
+          <div class="bstat free"><span class="bval" id="stat-free">&mdash;</span><span class="blbl">Free</span></div>
+          <div class="bstat occ"> <span class="bval" id="stat-occ">&mdash;</span> <span class="blbl">Occupied</span></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="main-grid">
+
+    <div class="left-col">
+      <!-- Parking lot -->
+      <div class="card">
+        <div class="card-head">
+          <h2>Parking Spots</h2>
+          <span style="font-size:11px;color:var(--muted)">click a spot to simulate sensor</span>
+        </div>
+        <div class="card-body">
+          <div class="lot">
+            <div class="lot-zone">Zone A</div>
+            <div class="lot-row" id="row-a"></div>
+            <div class="led-strip" id="led-strip"></div>
+            <div class="lot-row" id="row-b"></div>
+            <div class="lot-zone" style="margin-top:2px">Zone B</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Event log -->
+      <div class="card">
+        <div class="card-head">
+          <h2>Sensors &amp; Events</h2>
+          <button onclick="clearLog()" style="background:none;border:1px solid var(--border);color:var(--muted);border-radius:4px;padding:2px 8px;font-size:10px;cursor:pointer">Clear</button>
+        </div>
+        <div class="card-body" style="padding:8px">
+          <div class="event-log" id="event-log"></div>
+        </div>
+      </div>
+
+      <!-- Sensor Diagnostics -->
+      <div class="card">
+        <div class="card-head">
+          <h2>&#x1F527; Sensor Diagnostics</h2>
+          <span id="diag-ts" style="font-size:10px;color:var(--muted)">waiting&hellip;</span>
+        </div>
+        <div class="card-body" style="padding:10px">
+          <div id="diag-no-data" class="diag-no-data">No diagnostics yet — ESP32 must be running &amp; publishing</div>
+          <table class="diag-table" id="diag-table" style="display:none">
+            <thead>
+              <tr>
+                <th>Sensor</th>
+                <th>Status</th>
+                <th>Value</th>
+                <th>Raw</th>
+                <th>Test</th>
+              </tr>
+            </thead>
+            <tbody>
+              <!-- DHT11 -->
+              <tr id="drow-dht">
+                <td>DHT11 (GPIO 4)</td>
+                <td><span class="diag-status"><span class="diag-dot wait" id="ddot-dht"></span><span id="dlbl-dht">—</span></span></td>
+                <td><span class="diag-val" id="dval-dht">—</span></td>
+                <td class="diag-raw" id="draw-dht">—</td>
+                <td>—</td>
+              </tr>
+              <!-- BMP280 -->
+              <tr id="drow-bmp">
+                <td>BMP280 (I2C)</td>
+                <td><span class="diag-status"><span class="diag-dot wait" id="ddot-bmp"></span><span id="dlbl-bmp">—</span></span></td>
+                <td><span class="diag-val" id="dval-bmp">—</span></td>
+                <td class="diag-raw" id="draw-bmp">—</td>
+                <td>—</td>
+              </tr>
+              <!-- IR #1 -->
+              <tr id="drow-ir1">
+                <td>IR Speed #1 (GPIO 34)</td>
+                <td><span class="diag-status"><span class="diag-dot wait" id="ddot-ir1"></span><span id="dlbl-ir1">—</span></span></td>
+                <td><span class="diag-val" id="dval-ir1">—</span></td>
+                <td class="diag-raw" id="draw-ir1">—</td>
+                <td>—</td>
+              </tr>
+              <!-- IR #2 -->
+              <tr id="drow-ir2">
+                <td>IR Speed #2 (GPIO 35)</td>
+                <td><span class="diag-status"><span class="diag-dot wait" id="ddot-ir2"></span><span id="dlbl-ir2">—</span></span></td>
+                <td><span class="diag-val" id="dval-ir2">—</span></td>
+                <td class="diag-raw" id="draw-ir2">—</td>
+                <td>—</td>
+              </tr>
+              <!-- MQ-4 Left -->
+              <tr id="drow-gas1">
+                <td>MQ-4 Left (GPIO 32)</td>
+                <td><span class="diag-status"><span class="diag-dot wait" id="ddot-gas1"></span><span id="dlbl-gas1">—</span></span></td>
+                <td><span class="diag-val" id="dval-gas1">—</span></td>
+                <td class="diag-raw" id="draw-gas1">—</td>
+                <td>—</td>
+              </tr>
+              <!-- MQ-4 Right -->
+              <tr id="drow-gas2">
+                <td>MQ-4 Right (GPIO 33)</td>
+                <td><span class="diag-status"><span class="diag-dot wait" id="ddot-gas2"></span><span id="dlbl-gas2">—</span></span></td>
+                <td><span class="diag-val" id="dval-gas2">—</span></td>
+                <td class="diag-raw" id="draw-gas2">—</td>
+                <td>—</td>
+              </tr>
+              <!-- Flame Left -->
+              <tr id="drow-fl1">
+                <td>Flame Left (GPIO 25)</td>
+                <td><span class="diag-status"><span class="diag-dot wait" id="ddot-fl1"></span><span id="dlbl-fl1">—</span></span></td>
+                <td><span class="diag-val" id="dval-fl1">—</span></td>
+                <td class="diag-raw" id="draw-fl1">—</td>
+                <td>—</td>
+              </tr>
+              <!-- Flame Right -->
+              <tr id="drow-fl2">
+                <td>Flame Right (GPIO 26)</td>
+                <td><span class="diag-status"><span class="diag-dot wait" id="ddot-fl2"></span><span id="dlbl-fl2">—</span></span></td>
+                <td><span class="diag-val" id="dval-fl2">—</span></td>
+                <td class="diag-raw" id="draw-fl2">—</td>
+                <td>—</td>
+              </tr>
+              <!-- Entry Servo -->
+              <tr id="drow-sv1">
+                <td>Entry Servo (GPIO 18)</td>
+                <td><span class="diag-status"><span class="diag-dot wait" id="ddot-sv1"></span><span id="dlbl-sv1">standby</span></span></td>
+                <td><span class="diag-val" id="dval-sv1">closed</span></td>
+                <td class="diag-raw">—</td>
+                <td><button class="diag-test-btn" onclick="testServo('OPEN_ENTRY','A1')">Test</button></td>
+              </tr>
+              <!-- Exit Servo -->
+              <tr id="drow-sv2">
+                <td>Exit Servo (GPIO 19)</td>
+                <td><span class="diag-status"><span class="diag-dot wait" id="ddot-sv2"></span><span id="dlbl-sv2">standby</span></span></td>
+                <td><span class="diag-val" id="dval-sv2">closed</span></td>
+                <td class="diag-raw">—</td>
+                <td><button class="diag-test-btn" onclick="testServo('OPEN_EXIT','A1')">Test</button></td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <div class="right-col">
+      <!-- Camera -->
+      <div class="card">
+        <div class="card-head"><h2>Camera</h2></div>
+        <div class="card-body" style="padding:10px">
+          <div class="cam-wrap">
+            <div class="cam-ph" id="cam-ph">
+              <svg width="56" height="56" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.2">
+                <path d="M15 10l4.553-2.069A1 1 0 0121 8.868V15.13a1 1 0 01-1.447.9L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z"/>
+              </svg>
+              <p>No camera connected</p>
+            </div>
+            <img id="cam-img" alt="ESP-CAM">
+            <div class="live-tag" id="live-tag">&#x25CF; LIVE</div>
+          </div>
+          <div class="cam-ctrl">
+            <input id="cam-ip" placeholder="ESP-CAM IP (e.g. 192.168.1.189)" value="192.168.1.189">
+            <button class="bcam go" onclick="connectCam()">Connect</button>
+            <button class="bcam" onclick="disconnectCam()">&#x2715;</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Environment & Safety Sensors -->
+      <div class="card">
+        <div class="card-head">
+          <h2>&#x1F321; Environment &amp; Safety</h2>
+          <span id="env-ts" style="font-size:10px;color:var(--muted)">waiting for data&hellip;</span>
+        </div>
+        <div class="card-body" style="padding:12px">
+          <div id="env-no-data" class="env-no-data">No sensor data yet — ESP32 must be running</div>
+          <div id="env-grid" class="env-grid" style="display:none">
+            <div class="env-tile" id="env-temp">
+              <span class="env-label">Temperature</span>
+              <span class="env-val" id="ev-temp">&mdash;</span>
+              <span class="env-unit">&deg;C</span>
+            </div>
+            <div class="env-tile" id="env-humidity">
+              <span class="env-label">Humidity</span>
+              <span class="env-val" id="ev-humidity">&mdash;</span>
+              <span class="env-unit">%</span>
+            </div>
+            <div class="env-tile" id="env-pressure">
+              <span class="env-label">Pressure</span>
+              <span class="env-val" id="ev-pressure">&mdash;</span>
+              <span class="env-unit">hPa</span>
+            </div>
+            <div class="env-tile" id="env-bmp-temp">
+              <span class="env-label">BMP Temp</span>
+              <span class="env-val" id="ev-bmp-temp">&mdash;</span>
+              <span class="env-unit">&deg;C</span>
+            </div>
+            <div class="env-tile" id="env-gas1">
+              <span class="env-label">Gas Left (MQ-4)</span>
+              <span class="env-val" id="ev-gas1">&mdash;</span>
+              <span class="env-unit">raw ADC</span>
+            </div>
+            <div class="env-tile" id="env-gas2">
+              <span class="env-label">Gas Right (MQ-4)</span>
+              <span class="env-val" id="ev-gas2">&mdash;</span>
+              <span class="env-unit">raw ADC</span>
+            </div>
+            <div class="env-tile" id="env-flame1">
+              <span class="env-label">Flame Left</span>
+              <span class="env-val" id="ev-flame1">&#x2714;</span>
+              <span class="env-unit">status</span>
+            </div>
+            <div class="env-tile" id="env-flame2">
+              <span class="env-label">Flame Right</span>
+              <span class="env-val" id="ev-flame2">&#x2714;</span>
+              <span class="env-unit">status</span>
+            </div>
+            <div class="env-tile" id="env-speed" style="grid-column:span 2">
+              <span class="env-label">Entry Speed (last)</span>
+              <span class="env-val" id="ev-speed">&mdash;</span>
+              <span class="env-unit">km/h</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<script>
+let API = 'http://192.168.1.186:3000';
+let mqttClient = null;
+let spots = [];
+
+function applySettings() {
+  const ip = document.getElementById('api-ip').value.trim();
+  localStorage.setItem('api_ip', ip);
+  API = 'http://' + ip + ':3000';
+  initMqtt(ip);
+  fetchAll();
+}
+
+async function get(path) {
+  const r = await fetch(API + path);
+  if (!r.ok) throw new Error(r.status);
+  return r.json();
+}
+async function post(path, body) {
+  const r = await fetch(API + path, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+  if (!r.ok) throw new Error(r.status);
+  return r.json();
+}
+
+function barrierEntry() {
+  fetch(API + '/parking/open-barrier', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ command: 'OPEN_ENTRY' })
+  })
+    .then(r => r.json())
+    .then(() => logEv({ type: 'command', icon: '🟢', label: 'API', msg: 'OPEN_ENTRY sent' }))
+    .catch(e => logEv({ type: 'error', icon: '🔴', label: 'API', msg: 'OPEN_ENTRY failed: ' + e.message }));
+}
+function barrierExit() {
+  fetch(API + '/parking/open-barrier', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ command: 'OPEN_EXIT' })
+  })
+    .then(r => r.json())
+    .then(() => logEv({ type: 'command', icon: '🔓', label: 'API', msg: 'OPEN_EXIT sent' }))
+    .catch(e => logEv({ type: 'error', icon: '🔴', label: 'API', msg: 'OPEN_EXIT failed: ' + e.message }));
+}
+
+async function fetchSpots() {
+  try {
+    spots = await get('/spots');
+    renderLot();
+    updateCounts();
+  } catch(e) { console.warn('spots', e); }
+}
+
+function renderLot() {
+  const rowA = document.getElementById('row-a');
+  const rowB = document.getElementById('row-b');
+  const strip = document.getElementById('led-strip');
+  rowA.innerHTML = rowB.innerHTML = strip.innerHTML = '';
+  const aSpots = spots.filter(s => s.name.startsWith('A')).sort(byName);
+  const bSpots = spots.filter(s => s.name.startsWith('B')).sort(byName);
+  const cols = Math.max(aSpots.length, bSpots.length, 1);
+  aSpots.forEach(s => rowA.appendChild(makeSpot(s)));
+  bSpots.forEach(s => rowB.appendChild(makeSpot(s)));
+  for (let i = 0; i < cols; i++) {
+    const aOcc = aSpots[i] && aSpots[i].status === 'occupied';
+    const bOcc = bSpots[i] && bSpots[i].status === 'occupied';
+    const col = document.createElement('div');
+    col.className = 'led-col';
+    [aOcc, aOcc && bOcc, bOcc].forEach(red => {
+      const d = document.createElement('div');
+      d.className = 'led' + (red ? ' red' : '');
+      col.appendChild(d);
+    });
+    strip.appendChild(col);
+  }
+}
+
+function makeSpot(s) {
+  const d = document.createElement('div');
+  d.className = 'spot ' + (s.status || 'unknown');
+  const lbl = s.status === 'available' ? 'Free' : s.status === 'occupied' ? 'Occupied' : '?';
+  d.innerHTML = '<span class="sn">' + s.name + '</span><span class="ss">' + lbl + '</span>';
+  d.onclick = function() { toggleSpot(s); };
+  return d;
+}
+
+async function toggleSpot(s) {
+  const next = s.status === 'available' ? 'occupied' : 'available';
+  try {
+    await post('/parking/mock-sensor', { spotName: s.name, status: next });
+    s.status = next;
+    renderLot();
+    updateCounts();
+    logEv({ type: 'sensor', icon: next === 'occupied' ? '\u{1F534}' : '\u{1F7E2}', label: 'parking/sensor/' + s.name, msg: next });
+  } catch(e) { console.warn('toggle', e); }
+}
+
+function updateCounts() {
+  document.getElementById('stat-free').textContent = spots.filter(s => s.status === 'available').length;
+  document.getElementById('stat-occ').textContent  = spots.filter(s => s.status === 'occupied').length;
+}
+
+function byName(a, b) { return a.name.localeCompare(b.name, undefined, { numeric: true }); }
+
+let allUsers = [];
+let activeSessions = [];
+
+async function fetchStatus() {
+  try {
+    const s = await get('/parking/admin-status');
+    document.getElementById('dot-api').className   = 'dot ok';
+    document.getElementById('lbl-api').textContent = 'API OK';
+    document.getElementById('dot-mqtt').className  = s.mqttConnected ? 'dot ok' : 'dot err';
+    document.getElementById('lbl-mqtt').textContent = s.mqttConnected ? 'MQTT OK' : 'MQTT offline';
+    allUsers = s.users || [];
+    activeSessions = s.activeSessions || [];
+    renderUsers();
+    if (s.environment) updateEnvDisplay(s.environment);
+    if (s.speed) updateSpeedDisplay(s.speed);
+    if (s.diagnostics) updateDiagDisplay(s.diagnostics);
+  } catch(e) {
+    document.getElementById('dot-api').className   = 'dot err';
+    document.getElementById('lbl-api').textContent = 'API offline';
+  }
+}
+
+function updateEnvDisplay(env) {
+  if (!env) return;
+  document.getElementById('env-no-data').style.display = 'none';
+  document.getElementById('env-grid').style.display = 'grid';
+
+  if (env.temp     != null) document.getElementById('ev-temp').textContent     = env.temp;
+  if (env.humidity != null) document.getElementById('ev-humidity').textContent = env.humidity;
+  if (env.pressure != null) document.getElementById('ev-pressure').textContent = env.pressure;
+  if (env.bmp_temp != null) document.getElementById('ev-bmp-temp').textContent = env.bmp_temp;
+
+  function updateGas(id, tileId, val) {
+    if (val == null) return;
+    document.getElementById(id).textContent = val;
+    document.getElementById(tileId).className = 'env-tile' + (val > 2000 ? ' alert' : '');
+  }
+  updateGas('ev-gas1', 'env-gas1', env.gas1);
+  updateGas('ev-gas2', 'env-gas2', env.gas2);
+
+  function updateFlame(id, tileId, val) {
+    if (val == null) return;
+    var f = val === true || val === 'true';
+    document.getElementById(id).textContent = f ? '\u{1F525} DETECTED' : '\u2714 Clear';
+    document.getElementById(tileId).className = 'env-tile' + (f ? ' alert' : '');
+  }
+  updateFlame('ev-flame1', 'env-flame1', env.flame1);
+  updateFlame('ev-flame2', 'env-flame2', env.flame2);
+
+  var ts = env.updatedAt ? new Date(env.updatedAt).toLocaleTimeString('en-GB', { hour12: false }) : new Date().toLocaleTimeString('en-GB', { hour12: false });
+  document.getElementById('env-ts').textContent = 'updated ' + ts;
+}
+
+function updateSpeedDisplay(spd) {
+  if (!spd || spd.speed_kmh == null) return;
+  var kmh = spd.speed_kmh;
+  document.getElementById('ev-speed').textContent = kmh;
+  var tile = document.getElementById('env-speed');
+  tile.className = 'env-tile' + (kmh > 10 ? ' alert' : '');
+  document.getElementById('env-no-data').style.display = 'none';
+  document.getElementById('env-grid').style.display = 'grid';
+}
+
+function setDiagRow(id, dotId, lblId, valId, rawId, ok, label, value, raw, alertRow) {
+  var row = document.getElementById(id);
+  var dot = document.getElementById(dotId);
+  var lbl = document.getElementById(lblId);
+  var val = document.getElementById(valId);
+  var raw_ = document.getElementById(rawId);
+  if (!row) return;
+  dot.className = 'diag-dot ' + (ok ? 'ok' : 'err');
+  lbl.textContent = label;
+  val.textContent = value;
+  if (raw_) raw_.textContent = raw;
+  row.className = alertRow ? 'diag-alert' : '';
+}
+
+function updateDiagDisplay(d) {
+  if (!d) return;
+  document.getElementById('diag-no-data').style.display = 'none';
+  document.getElementById('diag-table').style.display = 'table';
+
+  var ts = d.updatedAt ? new Date(d.updatedAt).toLocaleTimeString('en-GB', { hour12: false }) : new Date().toLocaleTimeString('en-GB', { hour12: false });
+  document.getElementById('diag-ts').textContent = 'updated ' + ts;
+
+  // DHT11
+  var dhtOk = d.dht_ok === true;
+  var dhtVal = dhtOk ? d.dht_temp + '\u00b0C / ' + d.dht_humidity + '%' : 'NO DATA';
+  setDiagRow('drow-dht','ddot-dht','dlbl-dht','dval-dht','draw-dht',
+    dhtOk, dhtOk ? 'OK' : 'NOT CONNECTED', dhtVal, 'pin 4', !dhtOk);
+
+  // BMP280
+  var bmpOk = d.bmp_ok === true;
+  var bmpVal = bmpOk ? d.bmp_temp + '\u00b0C / ' + d.bmp_pressure + ' hPa' : 'NO DATA';
+  setDiagRow('drow-bmp','ddot-bmp','dlbl-bmp','dval-bmp','draw-bmp',
+    bmpOk, bmpOk ? 'OK' : 'NOT FOUND', bmpVal, 'I2C 0x76/0x77', !bmpOk);
+
+  // IR #1
+  var ir1Broken = d.ir1_raw === 0;
+  setDiagRow('drow-ir1','ddot-ir1','dlbl-ir1','dval-ir1','draw-ir1',
+    true, ir1Broken ? 'BLOCKED' : 'clear', ir1Broken ? 'beam broken' : 'beam clear',
+    'raw=' + d.ir1_raw, ir1Broken);
+
+  // IR #2
+  var ir2Broken = d.ir2_raw === 0;
+  setDiagRow('drow-ir2','ddot-ir2','dlbl-ir2','dval-ir2','draw-ir2',
+    true, ir2Broken ? 'BLOCKED' : 'clear', ir2Broken ? 'beam broken' : 'beam clear',
+    'raw=' + d.ir2_raw, ir2Broken);
+
+  // MQ-4 Left
+  var gas1Ok = d.gas1_ok === true;
+  var gas1Hi = d.gas1_raw > 2000;
+  setDiagRow('drow-gas1','ddot-gas1','dlbl-gas1','dval-gas1','draw-gas1',
+    gas1Ok, gas1Ok ? (gas1Hi ? 'HIGH GAS' : 'normal') : 'NOT CONNECTED',
+    d.gas1_raw, 'ADC pin 32', gas1Hi || !gas1Ok);
+
+  // MQ-4 Right
+  var gas2Ok = d.gas2_ok === true;
+  var gas2Hi = d.gas2_raw > 2000;
+  setDiagRow('drow-gas2','ddot-gas2','dlbl-gas2','dval-gas2','draw-gas2',
+    gas2Ok, gas2Ok ? (gas2Hi ? 'HIGH GAS' : 'normal') : 'NOT CONNECTED',
+    d.gas2_raw, 'ADC pin 33', gas2Hi || !gas2Ok);
+
+  // Flame Left
+  var fl1Det = d.flame1_detect === true;
+  setDiagRow('drow-fl1','ddot-fl1','dlbl-fl1','dval-fl1','draw-fl1',
+    true, fl1Det ? '\ud83d\udd25 FLAME!' : 'clear',
+    fl1Det ? 'FLAME DETECTED' : 'no flame',
+    'raw=' + d.flame1_raw + ' (LOW=fire)', fl1Det);
+
+  // Flame Right
+  var fl2Det = d.flame2_detect === true;
+  setDiagRow('drow-fl2','ddot-fl2','dlbl-fl2','dval-fl2','draw-fl2',
+    true, fl2Det ? '\ud83d\udd25 FLAME!' : 'clear',
+    fl2Det ? 'FLAME DETECTED' : 'no flame',
+    'raw=' + d.flame2_raw + ' (LOW=fire)', fl2Det);
+}
+
+async function testServo(command, spot) {
+  var sv = command === 'OPEN_ENTRY' ? 'sv1' : 'sv2';
+  document.getElementById('ddot-' + sv).className = 'diag-dot ok';
+  document.getElementById('dlbl-' + sv).textContent = 'opening…';
+  document.getElementById('dval-' + sv).textContent = 'open';
+  try {
+    await post('/parking/open-barrier', { type: command === 'OPEN_ENTRY' ? 'entry' : 'exit' });
+    logEv({ type: 'command', icon: '\u{1F916}', label: 'servo-test', msg: command + ' sent' });
+  } catch(e) {
+    // publish directly via backend if endpoint doesn't exist
+    logEv({ type: 'command', icon: '\u{1F916}', label: 'servo-test', msg: command + ' — check backend' });
+  }
+  setTimeout(function() {
+    document.getElementById('dlbl-' + sv).textContent = 'standby';
+    document.getElementById('dval-' + sv).textContent = 'closed';
+  }, 5000);
+}
+
+function renderUsers() {
+  const grid = document.getElementById('users-grid');
+  const lbl  = document.getElementById('users-lbl');
+  if (!allUsers.length) {
+    grid.innerHTML = '<span class="no-users">No users found</span>';
+    lbl.textContent = '';
+    return;
+  }
+  lbl.textContent = allUsers.length + ' user' + (allUsers.length !== 1 ? 's' : '') + ' · ' + activeSessions.length + ' active';
+  grid.innerHTML = allUsers.map(function(u) {
+    const session = activeSessions.find(function(s) { return s.userId === u.id || (s.user && s.user.email === u.email); });
+    const spotName = session ? (session.spot && session.spot.name ? session.spot.name : '?') : null;
+    const isAdmin  = u.role === 'ADMIN';
+    return '<div class="user-card' + (session ? ' active' : '') + '">' +
+      '<div class="user-avatar">' + (session ? '🚗' : (isAdmin ? '🔑' : '👤')) + '</div>' +
+      '<div class="user-info">' +
+        '<div class="user-email">' + u.email + '</div>' +
+        '<div class="user-meta">' + (isAdmin ? 'Admin · ' : '') + (session ? '<span class="user-spot">Parked at ' + spotName + '</span>' : 'No active session') + '</div>' +
+      '</div>' +
+      '<div class="user-actions">' +
+        (session
+          ? '<button class="ubtn exit" onclick="openExitFor(' + JSON.stringify(u.email) + ')">Open Exit</button>'
+          : '<button class="ubtn entry" onclick="openEntryFor(' + JSON.stringify(u.qrCode) + ',' + JSON.stringify(u.email) + ')">Open Entry</button>') +
+      '</div>' +
+    '</div>';
+  }).join('');
+}
+
+async function openEntryFor(qrCode, email) {
+  if (!qrCode) { logEv({ type: 'error', icon: '🔴', label: 'Entry', msg: email + ' has no QR code' }); return; }
+  try {
+    await post('/parking/hardware-scan', { qrCode });
+    logEv({ type: 'command', icon: '🟢', label: 'Entry', msg: 'Opened entry for ' + email });
+    fetchStatus();
+  } catch(e) {
+    logEv({ type: 'error', icon: '🔴', label: 'Entry', msg: 'Failed for ' + email + ': ' + e.message });
+  }
+}
+
+async function openExitFor(email) {
+  try {
+    await post('/parking/exit', { email });
+    logEv({ type: 'command', icon: '🔓', label: 'Exit', msg: 'Opened exit for ' + email });
+    fetchStatus();
+    fetchSpots();
+  } catch(e) {
+    logEv({ type: 'error', icon: '🔴', label: 'Exit', msg: 'Failed for ' + email + ': ' + e.message });
+  }
+}
+
+function initMqtt(ip) {
+  if (mqttClient) { try { mqttClient.end(true); } catch(_){} }
+  const lbl = document.getElementById('ws-lbl');
+  lbl.textContent = 'WS: connecting\u2026'; lbl.style.color = 'var(--muted)';
+  try {
+    mqttClient = mqtt.connect('ws://' + ip + ':9001', { clientId: 'dash-' + Math.random().toString(16).slice(2) });
+    mqttClient.on('connect', function() {
+      lbl.textContent = 'WS: connected \u2713'; lbl.style.color = 'var(--green)';
+      mqttClient.subscribe('parking/#');
+    });
+    mqttClient.on('error', function() { lbl.textContent = 'WS: error'; lbl.style.color = 'var(--red)'; });
+    mqttClient.on('close', function() { lbl.textContent = 'WS: disconnected'; lbl.style.color = 'var(--muted)'; });
+    mqttClient.on('message', function(topic, payload) {
+      var msg = payload.toString();
+      if (topic.startsWith('parking/sensor/')) {
+        var name = topic.replace('parking/sensor/', '');
+        var spot = spots.find(function(s) { return s.name === name; });
+        if (spot) { spot.status = msg.trim(); renderLot(); updateCounts(); }
+        logEv({ type: 'sensor', icon: msg.trim() === 'occupied' ? '\u{1F534}' : '\u{1F7E2}', label: topic, msg: msg });
+      } else if (topic === 'parking/environment') {
+        try { updateEnvDisplay(JSON.parse(msg)); } catch(_) {}
+        logEv({ type: 'sensor', icon: '\u{1F321}', label: topic, msg: msg });
+      } else if (topic === 'parking/speed') {
+        try { updateSpeedDisplay(JSON.parse(msg)); } catch(_) {}
+        logEv({ type: 'sensor', icon: '\u{1F4A8}', label: topic, msg: msg });
+      } else if (topic === 'parking/diagnostics') {
+        try { updateDiagDisplay(JSON.parse(msg)); } catch(_) {}
+      } else if (topic.includes('scan') || topic.includes('qr')) {
+        logEv({ type: 'qr', icon: '\u{1F4F7}', label: topic, msg: msg });
+      } else {
+        logEv({ type: 'command', icon: '\u{1F4E1}', label: topic, msg: msg });
+      }
+    });
+  } catch(e) { lbl.textContent = 'WS: unavailable'; }
+}
+
+var events = [];
+function logEv(e) {
+  e.time = new Date().toLocaleTimeString('en-GB', { hour12: false });
+  events.unshift(e);
+  if (events.length > 300) events.pop();
+  renderLog();
+}
+function renderLog() {
+  document.getElementById('event-log').innerHTML = events.map(function(e) {
+    return '<div class="ev ' + e.type + '"><span class="et">' + e.time + '</span><span>' + e.icon + '</span><span class="ec"><span class="etopic">' + e.label + '</span>  ' + e.msg + '</span></div>';
+  }).join('');
+}
+function clearLog() { events.length = 0; renderLog(); }
+
+var lastLogTs = 0;
+async function pollLog() {
+  if (mqttClient && mqttClient.connected) return;
+  try {
+    var data = await get('/parking/mqtt-log');
+    var log = data.log || [];
+    var fresh = log.filter(function(e) { return new Date(e.time).getTime() > lastLogTs; });
+    if (fresh.length) {
+      lastLogTs = Math.max.apply(null, fresh.map(function(e) { return new Date(e.time).getTime(); }));
+      fresh.reverse().forEach(function(e) {
+        var t = (e.topic || '');
+        logEv({ type: t.includes('sensor') ? 'sensor' : t.includes('scan') ? 'qr' : 'command', icon: '\u{1F4E1}', label: t || '--', msg: e.payload || '' });
+      });
+    }
+  } catch(_) {}
+}
+
+function connectCam() {
+  var ip = document.getElementById('cam-ip').value.trim();
+  if (!ip) return;
+  localStorage.setItem('cam_ip', ip);
+  var img = document.getElementById('cam-img');
+  img.src = 'http://' + ip + '/stream';
+  img.className = 'on';
+  img.onerror = disconnectCam;
+  document.getElementById('cam-ph').style.display = 'none';
+  document.getElementById('live-tag').className = 'live-tag on';
+}
+function disconnectCam() {
+  var img = document.getElementById('cam-img');
+  img.src = ''; img.className = '';
+  document.getElementById('cam-ph').style.display = '';
+  document.getElementById('live-tag').className = 'live-tag';
+}
+
+function fetchAll() { fetchSpots(); fetchStatus(); pollLog(); }
+async function tick() {
+  await fetchAll();
+  document.getElementById('lbl-ts').textContent = 'Updated ' + new Date().toLocaleTimeString('en-GB', { hour12: false });
+}
+
+window.addEventListener('DOMContentLoaded', function() {
+  var savedApi = localStorage.getItem('api_ip');
+  if (savedApi) { document.getElementById('api-ip').value = savedApi; API = 'http://' + savedApi + ':3000'; }
+  var savedCam = localStorage.getItem('cam_ip');
+  if (savedCam) document.getElementById('cam-ip').value = savedCam;
+  initMqtt(document.getElementById('api-ip').value.trim());
+  tick();
+  setInterval(tick, 5000);
+  setInterval(pollLog, 3000);
+});
+</script>
+</body>
+</html>

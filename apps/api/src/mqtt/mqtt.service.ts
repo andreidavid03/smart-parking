@@ -1,8 +1,10 @@
 import {
+  Inject,
   Injectable,
   Logger,
   OnModuleDestroy,
   OnModuleInit,
+  forwardRef,
 } from '@nestjs/common';
 import { connect, MqttClient } from 'mqtt';
 import { PrismaService } from '../prisma/prisma.service';
@@ -28,9 +30,130 @@ import { ParkingService } from '../parking/parking.service';
 export class MqttService implements OnModuleInit, OnModuleDestroy {
   private readonly logger = new Logger(MqttService.name);
   private client: MqttClient;
+  private readonly _mqttLog: Array<{
+    time: string;
+    direction: 'in' | 'out';
+    topic: string;
+    payload: string;
+  }> = [];
+
+  private _lastEnvironment: {
+    temp?: number;
+    humidity?: number;
+    pressure?: number;
+    bmp_temp?: number;
+    gas1?: number;
+    gas2?: number;
+    flame1?: boolean;
+    flame2?: boolean;
+    updatedAt?: string;
+  } | null = null;
+
+  private _lastSpeed: {
+    speed_kmh?: number;
+    elapsed_ms?: number;
+    updatedAt?: string;
+  } | null = null;
+
+  private _lastDiagnostics: Record<string, unknown> | null = null;
+
+  // ─── Alerts store ───────────────────────────────────────────────────────────
+  private _alerts: Array<{
+    id: string;
+    type: 'speed' | 'temperature' | 'flame' | 'gas';
+    severity: 'warning' | 'critical';
+    title: string;
+    detail: string;
+    value: number | null;
+    threshold: number | null;
+    timestamp: string;
+    read: boolean;
+  }> = [];
+
+  private _alertCounter = 0;
+
+  private _pushAlert(
+    type: 'speed' | 'temperature' | 'flame' | 'gas',
+    severity: 'warning' | 'critical',
+    title: string,
+    detail: string,
+    value: number | null = null,
+    threshold: number | null = null,
+  ) {
+    this._alerts.unshift({
+      id: `alert-${++this._alertCounter}-${Date.now()}`,
+      type,
+      severity,
+      title,
+      detail,
+      value,
+      threshold,
+      timestamp: new Date().toISOString(),
+      read: false,
+    });
+    if (this._alerts.length > 200) this._alerts.pop();
+    this.logger.warn(`[ALERT] ${title}: ${detail}`);
+  }
+
+  get alerts() {
+    return [...this._alerts];
+  }
+
+  get unreadAlertsCount() {
+    return this._alerts.filter((a) => !a.read).length;
+  }
+
+  markAlertsRead() {
+    this._alerts.forEach((a) => (a.read = true));
+  }
+
+  addMockAlerts() {
+    const now = new Date();
+    const t = (offsetSec: number) =>
+      new Date(now.getTime() - offsetSec * 1000).toISOString();
+
+    this._pushAlertRaw({ id: `mock-${++this._alertCounter}`, type: 'speed',       severity: 'critical', title: '🚨 Viteză depășită',          detail: '34.2 km/h (limita 10 km/h)',           value: 34.2, threshold: 10,  timestamp: t(15),  read: false });
+    this._pushAlertRaw({ id: `mock-${++this._alertCounter}`, type: 'temperature',  severity: 'warning',  title: '🌡️ Temperatură ridicată',       detail: '43.5°C (prag 40°C)',                  value: 43.5, threshold: 40,  timestamp: t(45),  read: false });
+    this._pushAlertRaw({ id: `mock-${++this._alertCounter}`, type: 'flame',        severity: 'critical', title: '🔥 Flacără detectată',           detail: 'Senzor flacără 1 activ',              value: null, threshold: null, timestamp: t(90),  read: false });
+    this._pushAlertRaw({ id: `mock-${++this._alertCounter}`, type: 'gas',          severity: 'warning',  title: '💨 Nivel gaz ridicat',           detail: 'MQ-4 #1: 820 (prag 700)',             value: 820,  threshold: 700, timestamp: t(180), read: false });
+    this._pushAlertRaw({ id: `mock-${++this._alertCounter}`, type: 'speed',        severity: 'warning',  title: '⚠️ Viteză ridicată',             detail: '18.7 km/h (limita 10 km/h)',           value: 18.7, threshold: 10,  timestamp: t(300), read: true  });
+    this._pushAlertRaw({ id: `mock-${++this._alertCounter}`, type: 'temperature',  severity: 'warning',  title: '🌡️ Temperatură ridicată',       detail: '36.1°C (prag 35°C)',                  value: 36.1, threshold: 35,  timestamp: t(600), read: true  });
+  }
+
+  private _pushAlertRaw(alert: typeof this._alerts[0]) {
+    this._alerts.unshift(alert);
+    if (this._alerts.length > 200) this._alerts.pop();
+  }
+
+  get mqttLog() {
+    return [...this._mqttLog];
+  }
+
+  get environmentData() {
+    return this._lastEnvironment;
+  }
+
+  get speedData() {
+    return this._lastSpeed;
+  }
+
+  get diagnosticsData() {
+    return this._lastDiagnostics;
+  }
+
+  private _logMqtt(direction: 'in' | 'out', topic: string, payload: string) {
+    this._mqttLog.unshift({
+      time: new Date().toISOString(),
+      direction,
+      topic,
+      payload: payload.length > 300 ? payload.slice(0, 300) + '…' : payload,
+    });
+    if (this._mqttLog.length > 100) this._mqttLog.pop();
+  }
 
   constructor(
     private readonly prisma: PrismaService,
+    @Inject(forwardRef(() => ParkingService))
     private readonly parkingService: ParkingService,
   ) {}
 
@@ -48,6 +171,21 @@ export class MqttService implements OnModuleInit, OnModuleDestroy {
         if (err) this.logger.error('Failed to subscribe to parking/scan', err);
         else this.logger.log('Subscribed to parking/scan');
       });
+      this.client.subscribe('parking/environment', (err) => {
+        if (err)
+          this.logger.error('Failed to subscribe to parking/environment', err);
+        else this.logger.log('Subscribed to parking/environment');
+      });
+      this.client.subscribe('parking/speed', (err) => {
+        if (err)
+          this.logger.error('Failed to subscribe to parking/speed', err);
+        else this.logger.log('Subscribed to parking/speed');
+      });
+      this.client.subscribe('parking/diagnostics', (err) => {
+        if (err)
+          this.logger.error('Failed to subscribe to parking/diagnostics', err);
+        else this.logger.log('Subscribed to parking/diagnostics');
+      });
     });
 
     this.client.on('message', (topic, message) => {
@@ -63,11 +201,91 @@ export class MqttService implements OnModuleInit, OnModuleDestroy {
     this.client?.end();
   }
 
+  get isConnected(): boolean {
+    return this.client?.connected ?? false;
+  }
+
   private async handleMessage(topic: string, payload: string) {
+    this._logMqtt('in', topic, payload);
     if (topic.startsWith('parking/sensor/')) {
       await this.handleSensorUpdate(topic, payload);
     } else if (topic === 'parking/scan') {
       await this.handleBarrierScan(payload);
+    } else if (topic === 'parking/environment') {
+      this.handleEnvironmentUpdate(payload);
+    } else if (topic === 'parking/speed') {
+      this.handleSpeedUpdate(payload);
+    } else if (topic === 'parking/diagnostics') {
+      try {
+        this._lastDiagnostics = {
+          ...(JSON.parse(payload) as Record<string, unknown>),
+          updatedAt: new Date().toISOString(),
+        };
+      } catch {
+        this.logger.warn(`Failed to parse diagnostics payload: ${payload}`);
+      }
+    }
+  }
+
+  private handleSpeedUpdate(payload: string) {
+    try {
+      const data = JSON.parse(payload) as { speed_kmh?: number; elapsed_ms?: number };
+      this._lastSpeed = { ...data, updatedAt: new Date().toISOString() };
+      this.logger.log(`Speed update: ${data.speed_kmh ?? '?'} km/h`);
+      const kmh = data.speed_kmh ?? 0;
+      const limit = 10;
+      if (kmh > limit) {
+        this._pushAlert(
+          'speed',
+          kmh > 25 ? 'critical' : 'warning',
+          kmh > 25 ? '🚨 Viteză depășită' : '⚠️ Viteză ridicată',
+          `${kmh.toFixed(1)} km/h (limita ${limit} km/h)`,
+          kmh,
+          limit,
+        );
+      }
+    } catch {
+      this.logger.warn(`Failed to parse speed payload: ${payload}`);
+    }
+  }
+
+  private handleEnvironmentUpdate(payload: string) {
+    try {
+      const data = JSON.parse(payload) as typeof this._lastEnvironment;
+      this._lastEnvironment = { ...data, updatedAt: new Date().toISOString() };
+      this.logger.debug(`Environment update: ${payload}`);
+
+      // Temperature alert
+      const temp = (data as { temp?: number })?.temp ?? null;
+      if (temp !== null && temp > 35) {
+        this._pushAlert(
+          'temperature',
+          temp > 40 ? 'critical' : 'warning',
+          temp > 40 ? '🌡️ Temperatură critică' : '🌡️ Temperatură ridicată',
+          `${temp.toFixed(1)}°C (prag ${temp > 40 ? 40 : 35}°C)`,
+          temp,
+          temp > 40 ? 40 : 35,
+        );
+      }
+
+      // Flame alerts
+      const d = data as { flame1?: boolean; flame2?: boolean; gas1?: number; gas2?: number };
+      if (d.flame1 === true) {
+        this._pushAlert('flame', 'critical', '🔥 Flacără detectată', 'Senzor flacără 1 activ');
+      }
+      if (d.flame2 === true) {
+        this._pushAlert('flame', 'critical', '🔥 Flacără detectată', 'Senzor flacără 2 activ');
+      }
+
+      // Gas alerts
+      if ((d.gas1 ?? 0) > 700) {
+        this._pushAlert('gas', d.gas1! > 1000 ? 'critical' : 'warning', '💨 Nivel gaz ridicat', `MQ-4 #1: ${d.gas1} (prag 700)`, d.gas1!, 700);
+      }
+      if ((d.gas2 ?? 0) > 700) {
+        this._pushAlert('gas', d.gas2! > 1000 ? 'critical' : 'warning', '💨 Nivel gaz ridicat', `MQ-4 #2: ${d.gas2} (prag 700)`, d.gas2!, 700);
+      }
+    } catch {
+      this.logger.warn(`Failed to parse environment payload: ${payload}`);
     }
   }
 
@@ -129,6 +347,34 @@ export class MqttService implements OnModuleInit, OnModuleDestroy {
       select: { name: true, status: true },
       orderBy: { name: 'asc' },
     });
-    this.client.publish('parking/status', JSON.stringify(spots));
+    const payload = JSON.stringify(spots);
+    this.client.publish('parking/status', payload);
+    this._logMqtt('out', 'parking/status', payload);
+  }
+
+  /**
+   * Publish a command to the hardware controller.
+   * Topic: parking/commands
+   * Example payload: { command: 'OPEN_ENTRY', spot: 'A1' }
+   */
+  publishCommand(payload: object): void {
+    const msg = JSON.stringify(payload);
+    this.client.publish('parking/commands', msg);
+    this._logMqtt('out', 'parking/commands', msg);
+    this.logger.log(`Published to parking/commands: ${msg}`);
+  }
+
+  /**
+   * Simulate a hardware ultrasonic/IR sensor event.
+   * Publishes to parking/sensor/<spotName> — the subscriber above picks it up
+   * and updates the DB, exactly like a real sensor would.
+   */
+  publishSensorUpdate(
+    spotName: string,
+    status: 'occupied' | 'available',
+  ): void {
+    this.client.publish(`parking/sensor/${spotName}`, status);
+    this._logMqtt('out', `parking/sensor/${spotName}`, status);
+    this.logger.log(`Simulated sensor: ${spotName} → ${status}`);
   }
 }

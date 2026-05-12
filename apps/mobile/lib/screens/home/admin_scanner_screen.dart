@@ -3,7 +3,8 @@ import 'package:qr_code_scanner/qr_code_scanner.dart';
 import '../../services/api_service.dart';
 
 class AdminScannerScreen extends StatefulWidget {
-  const AdminScannerScreen({super.key});
+  final VoidCallback? onScanSuccess;
+  const AdminScannerScreen({super.key, this.onScanSuccess});
 
   @override
   State<AdminScannerScreen> createState() => _AdminScannerScreenState();
@@ -47,40 +48,47 @@ class _AdminScannerScreenState extends State<AdminScannerScreen> {
 
     controller?.pauseCamera();
 
-    // Show spot selection dialog first
-    final spotId = await _showSpotSelectionDialog();
-    
-    if (spotId == null) {
-      // User cancelled - resume scanning
-      setState(() {
-        _processing = false;
-        _lastScannedCode = null;
-      });
-      controller?.resumeCamera();
-      return;
-    }
-
-    final result = await ApiService.scanQRCode(qrCode, spotId: spotId);
+    // First attempt without a specific spotId — handles exits automatically
+    // and uses smart allocation for entrances.
+    var result = await ApiService.scanQRCode(qrCode);
 
     if (!mounted) return;
 
+    // If entrance scan and no spot was auto-allocated, ask the admin to pick one
+    if (!result['success'] &&
+        (result['message'] as String? ?? '').toLowerCase().contains('spot')) {
+      final spotId = await _showSpotSelectionDialog();
+      if (spotId == null) {
+        setState(() {
+          _processing = false;
+          _lastScannedCode = null;
+        });
+        controller?.resumeCamera();
+        return;
+      }
+      result = await ApiService.scanQRCode(qrCode, spotId: spotId);
+      if (!mounted) return;
+    }
+
     if (result['success']) {
-      final data = result['data'];
-      final action = data['action'] ?? 'unknown';
-      final spot = data['spot']?['name'] ?? 'N/A';
-      
+      final data = result['data'] as Map<String, dynamic>;
+      final action = data['action'] as String? ?? '';
+      final session = data['session'] as Map<String, dynamic>?;
+      final spot = (session?['spot'] as Map<String, dynamic>?)?['name'] as String? ?? 'N/A';
+
       _showResultDialog(
         success: true,
-        title: action == 'entry' ? '✅ Entry Successful' : '✅ Exit Successful',
-        message: action == 'entry' 
-          ? 'Parked at spot $spot'
-          : 'Session ended for spot $spot',
+        title: action == 'entrance' ? '✅ Entry Successful' : '✅ Exit Successful',
+        message: action == 'entrance'
+            ? 'Parked at spot $spot'
+            : 'Session ended for spot $spot',
+        onDismissed: () => widget.onScanSuccess?.call(),
       );
     } else {
       _showResultDialog(
         success: false,
         title: '❌ Scan Failed',
-        message: result['message'] ?? 'Unknown error',
+        message: result['message'] as String? ?? 'Unknown error',
       );
     }
 
@@ -142,8 +150,9 @@ class _AdminScannerScreenState extends State<AdminScannerScreen> {
     required bool success,
     required String title,
     required String message,
+    VoidCallback? onDismissed,
   }) {
-    showDialog(
+    showDialog<void>(
       context: context,
       builder: (context) => AlertDialog(
         title: Text(title),
@@ -157,6 +166,7 @@ class _AdminScannerScreenState extends State<AdminScannerScreen> {
                 _lastScannedCode = null;
               });
               controller?.resumeCamera();
+              onDismissed?.call();
             },
             child: const Text('OK'),
           ),

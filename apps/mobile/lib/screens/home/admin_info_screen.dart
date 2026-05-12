@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../../services/api_service.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
+import '../parking/parking_config_screen.dart';
 
 class AdminInfoScreen extends StatefulWidget {
   final Function(int)? onTabChange;
@@ -60,7 +61,7 @@ class _AdminInfoScreenState extends State<AdminInfoScreen> {
       backgroundColor: Colors.grey.shade100,
       appBar: AppBar(
         title: const Text(
-          'Informații Parcare',
+          'Configurare',
           style: TextStyle(fontWeight: FontWeight.bold),
         ),
         backgroundColor: Colors.orange.shade700,
@@ -280,17 +281,12 @@ class _AdminInfoScreenState extends State<AdminInfoScreen> {
                             Icons.settings,
                             Colors.blue,
                             () {
-                              // Use callback if available, otherwise show message
-                              if (widget.onTabChange != null) {
-                                widget.onTabChange!(2); // Switch to Config tab (index 2)
-                              } else {
-                                ScaffoldMessenger.of(context).showSnackBar(
-                                  const SnackBar(
-                                    content: Text('Mergi la tab-ul "Config" din meniul de jos'),
-                                    duration: Duration(seconds: 2),
-                                  ),
-                                );
-                              }
+                              Navigator.push(
+                                context,
+                                MaterialPageRoute(
+                                  builder: (_) => const ParkingConfigScreen(),
+                                ),
+                              );
                             },
                           ),
                         ],

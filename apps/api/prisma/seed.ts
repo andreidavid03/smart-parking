@@ -11,18 +11,10 @@ async function main() {
     },
   });
 
-  // Create parking spots with zones A and B
+  // Create parking spots — Zone A and Zone B, 5 spots each, two rows back-to-back
   const spots = [
-    // Zone A - 10 spots
-    ...Array.from({ length: 10 }, (_, i) => ({
-      name: `A${i + 1}`,
-      status: 'available',
-    })),
-    // Zone B - 10 spots
-    ...Array.from({ length: 10 }, (_, i) => ({
-      name: `B${i + 1}`,
-      status: 'available',
-    })),
+    ...Array.from({ length: 5 }, (_, i) => ({ name: `A${i + 1}`, status: 'available' })),
+    ...Array.from({ length: 5 }, (_, i) => ({ name: `B${i + 1}`, status: 'available' })),
   ];
 
   await prisma.spot.createMany({ data: spots, skipDuplicates: true });

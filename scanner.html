@@ -1,0 +1,159 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>QR Scanner Bridge – Smart Parking</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: -apple-system, sans-serif;
+      background: #1e1e2e;
+      color: #cdd6f4;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: flex-start;
+      min-height: 100vh;
+      padding: 40px 20px;
+    }
+    h1 { font-size: 22px; margin-bottom: 4px; color: #89b4fa; }
+    .subtitle { font-size: 13px; color: #6c7086; margin-bottom: 30px; }
+    #status-box {
+      width: 100%;
+      max-width: 500px;
+      background: #313244;
+      border-radius: 14px;
+      padding: 24px;
+      margin-bottom: 20px;
+      text-align: center;
+      border: 2px solid #45475a;
+      transition: border-color 0.3s;
+    }
+    #status-box.ready  { border-color: #a6e3a1; }
+    #status-box.scanned { border-color: #89b4fa; }
+    #status-icon { font-size: 48px; margin-bottom: 12px; }
+    #status-text { font-size: 18px; font-weight: 600; }
+    #status-sub  { font-size: 13px; color: #6c7086; margin-top: 6px; }
+    #log {
+      width: 100%;
+      max-width: 500px;
+      background: #181825;
+      border-radius: 10px;
+      padding: 16px;
+      font-family: 'Menlo', monospace;
+      font-size: 13px;
+      height: 260px;
+      overflow-y: auto;
+      border: 1px solid #313244;
+    }
+    .log-entry { margin-bottom: 8px; line-height: 1.5; }
+    .log-entry.ok   { color: #a6e3a1; }
+    .log-entry.err  { color: #f38ba8; }
+    .log-entry.info { color: #89b4fa; }
+    .log-entry.scan { color: #fab387; }
+    #buf-display {
+      margin-top: 16px;
+      font-size: 11px;
+      color: #45475a;
+      font-family: monospace;
+      min-height: 16px;
+    }
+    a.reset-btn {
+      margin-top: 20px;
+      display: inline-block;
+      padding: 10px 28px;
+      background: #313244;
+      border-radius: 8px;
+      color: #cdd6f4;
+      text-decoration: none;
+      font-size: 14px;
+      cursor: pointer;
+      border: 1px solid #45475a;
+    }
+    a.reset-btn:hover { background: #45475a; }
+  </style>
+</head>
+<body>
+  <h1>🚗 Smart Parking — QR Bridge</h1>
+  <p class="subtitle">Click anywhere on this page, then scan with the GM65</p>
+
+  <div id="status-box" class="ready">
+    <div id="status-icon">📶</div>
+    <div id="status-text">Ready — waiting for scan</div>
+    <div id="status-sub">Backend: http://localhost:3000/parking/hardware-scan</div>
+  </div>
+
+  <div id="log"></div>
+  <div id="buf-display"></div>
+  <a class="reset-btn" onclick="clearLog()">Clear log</a>
+
+  <script>
+    const BACKEND = 'http://localhost:3000/parking/hardware-scan';
+    let buf = '';
+
+    function log(msg, cls) {
+      const el = document.getElementById('log');
+      const d = document.createElement('div');
+      d.className = 'log-entry ' + cls;
+      d.textContent = new Date().toLocaleTimeString() + '  ' + msg;
+      el.appendChild(d);
+      el.scrollTop = el.scrollHeight;
+    }
+
+    function clearLog() {
+      document.getElementById('log').innerHTML = '';
+    }
+
+    function setStatus(icon, text, sub, cls) {
+      document.getElementById('status-icon').textContent = icon;
+      document.getElementById('status-text').textContent = text;
+      document.getElementById('status-sub').textContent = sub;
+      const box = document.getElementById('status-box');
+      box.className = '';
+      box.classList.add(cls);
+    }
+
+    async function sendScan(qr) {
+      log('[SCAN] ' + qr, 'scan');
+      setStatus('⏳', 'Sending to backend…', qr, 'scanned');
+      try {
+        const r = await fetch(BACKEND, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ qrCode: qr })
+        });
+        const data = await r.json();
+        if (data.action === 'entrance') {
+          const spot = data.session?.spot?.name ?? '?';
+          log('[✓] ENTRY → Spot: ' + spot, 'ok');
+          setStatus('🅿️', 'ENTRY — Spot ' + spot, 'Parking session started', 'ready');
+        } else if (data.action === 'exit') {
+          const spot = data.session?.spot?.name ?? '?';
+          log('[✓] EXIT → Spot freed: ' + spot, 'ok');
+          setStatus('🚪', 'EXIT — Spot freed: ' + spot, 'Session ended', 'ready');
+        } else {
+          log('[?] ' + JSON.stringify(data), 'err');
+          setStatus('❓', 'Unknown response', JSON.stringify(data), 'ready');
+        }
+      } catch (e) {
+        log('[✗] ' + e.message, 'err');
+        setStatus('❌', 'Backend unreachable', e.message, 'ready');
+      }
+    }
+
+    document.addEventListener('keydown', function(e) {
+      if (e.key === 'Enter') {
+        const qr = buf.trim();
+        buf = '';
+        document.getElementById('buf-display').textContent = '';
+        if (qr) sendScan(qr);
+      } else if (e.key.length === 1) {
+        buf += e.key;
+        document.getElementById('buf-display').textContent = 'buffering: ' + buf;
+      }
+    });
+
+    log('Bridge ready. Click this page, then scan a QR code.', 'info');
+  </script>
+</body>
+</html>

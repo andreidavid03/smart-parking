@@ -19,5 +19,12 @@ services:
     volumes:
       - ./mqtt/mosquitto.conf:/mosquitto/config/mosquitto.conf
 
+  dashboard:
+    image: nginx:alpine
+    ports: ["8091:80"]
+    volumes:
+      - ../apps/dashboard:/usr/share/nginx/html:ro
+    restart: unless-stopped
+
 volumes:
   pgdata:

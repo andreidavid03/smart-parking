@@ -3,7 +3,7 @@ import 'package:http/http.dart' as http;
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
 class ApiService {
-  static const String baseUrl = 'http://192.168.1.166:3000';
+  static const String baseUrl = 'http://192.168.1.210:3000';
   static const FlutterSecureStorage _storage = FlutterSecureStorage();
 
   static Future<String?> login(String email, String password) async {
@@ -171,10 +171,44 @@ class ApiService {
     }
   }
 
+  static Future<Map<String, dynamic>?> getLastSession(String email) async {
+    try {
+      final response = await http.post(
+        Uri.parse('$baseUrl/parking/last-session'),
+        headers: {'Content-Type': 'application/json'},
+        body: jsonEncode({'email': email}),
+      );
+      if (response.statusCode == 200 || response.statusCode == 201) {
+        return jsonDecode(response.body) as Map<String, dynamic>;
+      }
+      return null;
+    } catch (e) {
+      return null;
+    }
+  }
+
   static Future<Map<String, dynamic>?> getCurrentSession(String email) async {
     try {
       final response = await http.post(
         Uri.parse('$baseUrl/parking/current-session'),
+        headers: {'Content-Type': 'application/json'},
+        body: jsonEncode({'email': email}),
+      );
+      if (response.statusCode == 200 || response.statusCode == 201) {
+        return jsonDecode(response.body) as Map<String, dynamic>;
+      }
+      return null;
+    } catch (e) {
+      return null;
+    }
+  }
+
+  /// Ends the active session and opens the exit barrier via MQTT.
+  /// Returns { spotName, sessionId, durationMinutes, costPerHour, totalCost }.
+  static Future<Map<String, dynamic>?> exitSession(String email) async {
+    try {
+      final response = await http.post(
+        Uri.parse('$baseUrl/parking/exit'),
         headers: {'Content-Type': 'application/json'},
         body: jsonEncode({'email': email}),
       );
@@ -325,6 +359,22 @@ class ApiService {
     }
   }
 
+  static Future<Map<String, dynamic>?> getAdminStatus() async {
+    try {
+      final response = await http.get(
+        Uri.parse('$baseUrl/parking/admin-status'),
+        headers: {'Content-Type': 'application/json'},
+      );
+      if (response.statusCode == 200) {
+        return jsonDecode(response.body) as Map<String, dynamic>;
+      }
+      return null;
+    } catch (e) {
+      print('Error getting admin status: $e');
+      return null;
+    }
+  }
+
   static Future<Map<String, dynamic>?> getProfile() async {
     try {
       final email = await _storage.read(key: 'user_email');
@@ -399,6 +449,116 @@ class ApiService {
     } catch (e) {
       print('Error updating car color: $e');
       return 'Connection error';
+    }
+  }
+
+  static Future<List<Map<String, dynamic>>?> getSessionHistory(String email) async {
+    try {
+      final response = await http.post(
+        Uri.parse('$baseUrl/parking/history'),
+        headers: {'Content-Type': 'application/json'},
+        body: jsonEncode({'email': email}),
+      );
+      if (response.statusCode == 200 || response.statusCode == 201) {
+        final List<dynamic> data = jsonDecode(response.body);
+        return data.cast<Map<String, dynamic>>();
+      }
+      return null;
+    } catch (e) {
+      return null;
+    }
+  }
+
+  /// Simulate a hardware sensor event for a parking spot.
+  /// [status] must be "occupied" or "available".
+  static Future<bool> mockSensor(String spotName, String status) async {
+    try {
+      final response = await http.post(
+        Uri.parse('$baseUrl/parking/mock-sensor'),
+        headers: {'Content-Type': 'application/json'},
+        body: jsonEncode({'spotName': spotName, 'status': status}),
+      );
+      return response.statusCode == 200 || response.statusCode == 201;
+    } catch (e) {
+      return false;
+    }
+  }
+
+  /// Reserve a parking spot → LED turns BLUE on the physical model.
+  static Future<Map<String, dynamic>> reserveSpot(String spotName) async {
+    try {
+      final email = await _storage.read(key: 'user_email');
+      if (email == null) return {'ok': false, 'message': 'Not logged in'};
+      final response = await http.post(
+        Uri.parse('$baseUrl/parking/reserve-spot'),
+        headers: {'Content-Type': 'application/json'},
+        body: jsonEncode({'email': email, 'spotName': spotName}),
+      );
+      final data = jsonDecode(response.body) as Map<String, dynamic>;
+      if (response.statusCode == 200 || response.statusCode == 201) {
+        return {'ok': true, ...data};
+      }
+      return {'ok': false, 'message': data['message'] ?? 'Failed to reserve'};
+    } catch (e) {
+      return {'ok': false, 'message': 'Connection error'};
+    }
+  }
+
+  /// Cancel a spot reservation → LED turns back GREEN.
+  static Future<Map<String, dynamic>> cancelReservation(String spotName) async {
+    try {
+      final response = await http.post(
+        Uri.parse('$baseUrl/parking/cancel-reservation'),
+        headers: {'Content-Type': 'application/json'},
+        body: jsonEncode({'spotName': spotName}),
+      );
+      final data = jsonDecode(response.body) as Map<String, dynamic>;
+      if (response.statusCode == 200 || response.statusCode == 201) {
+        return {'ok': true, ...data};
+      }
+      return {'ok': false, 'message': data['message'] ?? 'Failed to cancel'};
+    } catch (e) {
+      return {'ok': false, 'message': 'Connection error'};
+    }
+  }
+
+  static Future<Map<String, dynamic>?> getAlerts() async {
+    try {
+      final response = await http.get(Uri.parse('$baseUrl/parking/alerts'));
+      if (response.statusCode == 200) {
+        return jsonDecode(response.body) as Map<String, dynamic>;
+      }
+      return null;
+    } catch (e) {
+      return null;
+    }
+  }
+
+  static Future<void> markAlertsRead() async {
+    try {
+      await http.post(Uri.parse('$baseUrl/parking/alerts/read'));
+    } catch (_) {}
+  }
+
+  static Future<bool> addMockAlerts() async {
+    try {
+      final response = await http.post(Uri.parse('$baseUrl/parking/alerts/mock'));
+      return response.statusCode == 200 || response.statusCode == 201;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  static Future<Map<String, dynamic>?> getLatestSpeed() async {
+    try {
+      final response = await http.get(Uri.parse('$baseUrl/parking/admin-status'));
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body) as Map<String, dynamic>;
+        return data['speed'] as Map<String, dynamic>?;
+      }
+      return null;
+    } catch (_) {
+      return null;
     }
   }
 }

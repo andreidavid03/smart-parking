@@ -9,3 +9,8 @@ dist
 .pub-cache
 build
 **/GeneratedPluginRegistrant.*
+.DS_Store
+**/.DS_Store
+~$*.docx
+~$*.doc
+~$*.xlsx

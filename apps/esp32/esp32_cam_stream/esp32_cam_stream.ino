@@ -33,8 +33,8 @@
 #include "esp_http_server.h"
 
 // ─── WiFi ─────────────────────────────────────────────────────────────────────
-const char* WIFI_SSID     = "thezuni-1";    // <-- your WiFi
-const char* WIFI_PASSWORD = "0744804859";   // <-- your password
+const char* WIFI_SSID     = "campus";       // <-- your WiFi
+const char* WIFI_PASSWORD = "barcelona";    // <-- your password
 
 // ─── Camera pin map for AI Thinker ESP32-CAM ──────────────────────────────────
 #define PWDN_GPIO_NUM     32
@@ -198,7 +198,7 @@ void setup() {
   config.pin_sscb_scl = SIOC_GPIO_NUM;
   config.pin_pwdn     = PWDN_GPIO_NUM;
   config.pin_reset    = RESET_GPIO_NUM;
-  config.xclk_freq_hz = 10000000;        // 10MHz — mai stabil cu OV2640
+  config.xclk_freq_hz = 8000000;         // 8MHz — mai compatibil cu module OV2640 ieftine
   config.pixel_format = PIXFORMAT_JPEG;
   config.frame_size   = FRAMESIZE_QVGA;  // 320x240
   config.jpeg_quality = 12;
@@ -230,9 +230,9 @@ void setup() {
   if (PWDN_GPIO_NUM != -1) {
     pinMode(PWDN_GPIO_NUM, OUTPUT);
     digitalWrite(PWDN_GPIO_NUM, HIGH); // power down
-    delay(100);
+    delay(300);                        // mai mult timp de discharge
     digitalWrite(PWDN_GPIO_NUM, LOW);  // power up
-    delay(100);
+    delay(300);                        // mai mult timp pentru stabilizare
   }
 
   esp_err_t err = esp_camera_init(&config);

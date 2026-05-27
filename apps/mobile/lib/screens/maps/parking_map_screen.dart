@@ -274,83 +274,112 @@ class _ParkingMapScreenState extends State<ParkingMapScreen> {
     // Sortăm rândurile alfabetic
     final sortedRows = rows.keys.toList()..sort();
 
-    return Column(
-      children: sortedRows.map((rowKey) {
-        final rowSpots = rows[rowKey]!;
-        // Sortăm spot-urile din rând numeric
-        rowSpots.sort((a, b) {
-          final numA = int.tryParse(a['name'].substring(1)) ?? 0;
-          final numB = int.tryParse(b['name'].substring(1)) ?? 0;
-          return numA.compareTo(numB);
-        });
+    Widget roadDivider = Container(
+      margin: const EdgeInsets.symmetric(vertical: 4),
+      padding: const EdgeInsets.symmetric(vertical: 10),
+      decoration: BoxDecoration(
+        color: Colors.blueGrey.shade700,
+        borderRadius: BorderRadius.circular(8),
+      ),
+      child: const Row(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Icon(Icons.directions_car, color: Colors.white70, size: 18),
+          SizedBox(width: 8),
+          Text('· · · DRUM · · ·', style: TextStyle(color: Colors.white70, fontWeight: FontWeight.bold, letterSpacing: 3)),
+          SizedBox(width: 8),
+          Icon(Icons.directions_car, color: Colors.white70, size: 18),
+        ],
+      ),
+    );
 
-        return Padding(
-          padding: const EdgeInsets.only(bottom: 24),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              // Label rând
-              Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                child: Row(
-                  children: [
-                    Container(
-                      padding: const EdgeInsets.all(8),
-                      decoration: BoxDecoration(
-                        color: Colors.blue.shade100,
-                        shape: BoxShape.circle,
-                      ),
-                      child: Text(
-                        rowKey,
-                        style: TextStyle(
-                          fontSize: 20,
-                          fontWeight: FontWeight.bold,
-                          color: Colors.blue.shade900,
-                        ),
-                      ),
+    final rowWidgets = sortedRows.map((rowKey) {
+      final rowSpots = rows[rowKey]!;
+      rowSpots.sort((a, b) {
+        final numA = int.tryParse(a['name'].substring(1)) ?? 0;
+        final numB = int.tryParse(b['name'].substring(1)) ?? 0;
+        return numA.compareTo(numB);
+      });
+      return _buildRowSection(rowKey, rowSpots);
+    }).toList();
+
+    return Column(
+      children: [
+        // Drum față (INTRARE)
+        roadDivider,
+        const SizedBox(height: 8),
+        // Toate rândurile (A, B, etc.) — fără drum între ele
+        ...rowWidgets,
+        const SizedBox(height: 4),
+        // Drum spate (IEȘIRE)
+        roadDivider,
+      ],
+    );
+  }
+
+  Widget _buildRowSection(String rowKey, List<Map<String, dynamic>> rowSpots) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 8),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+            child: Row(
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(8),
+                  decoration: BoxDecoration(
+                    color: Colors.blue.shade100,
+                    shape: BoxShape.circle,
+                  ),
+                  child: Text(
+                    rowKey,
+                    style: TextStyle(
+                      fontSize: 20,
+                      fontWeight: FontWeight.bold,
+                      color: Colors.blue.shade900,
                     ),
-                    const SizedBox(width: 12),
-                    Text(
-                      'Zona $rowKey',
-                      style: TextStyle(
-                         fontSize: 18,
-                         fontWeight: FontWeight.bold,
-                         color: Colors.grey.shade800,
-                      ),
-                    ),
-                    const Spacer(),
-                    Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
-                      decoration: BoxDecoration(
-                        color: Colors.grey.shade200,
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                      child: Text(
-                        '${rowSpots.length} Locuri',
-                        style: TextStyle(
-                          color: Colors.grey.shade700,
-                          fontSize: 12,
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
-                    ),
-                  ],
+                  ),
                 ),
-              ),
-              const SizedBox(height: 8),
-              // Spoturi în rând
-              Center(
-                child: Wrap(
-                  spacing: 12,
-                  runSpacing: 12,
-                  alignment: WrapAlignment.start,
-                  children: rowSpots.map((spot) => _buildSpotCard(spot)).toList(),
+                const SizedBox(width: 12),
+                Text(
+                  'Rând $rowKey',
+                  style: TextStyle(
+                    fontSize: 18,
+                    fontWeight: FontWeight.bold,
+                    color: Colors.grey.shade800,
+                  ),
                 ),
-              ),
-            ],
+                const Spacer(),
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+                  decoration: BoxDecoration(
+                    color: Colors.grey.shade200,
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: Text(
+                    '${rowSpots.length} locuri',
+                    style: TextStyle(
+                      color: Colors.grey.shade700,
+                      fontSize: 12,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                ),
+              ],
+            ),
           ),
-        );
-      }).toList(),
+          Center(
+            child: Wrap(
+              spacing: 12,
+              runSpacing: 12,
+              alignment: WrapAlignment.center,
+              children: rowSpots.map((spot) => _buildSpotCard(spot)).toList(),
+            ),
+          ),
+        ],
+      ),
     );
   }
 

@@ -93,6 +93,10 @@ export class MqttService implements OnModuleInit, OnModuleDestroy {
     });
     if (this._alerts.length > 200) this._alerts.pop();
     this.logger.warn(`[ALERT] ${title}: ${detail}`);
+    // Trigger buzzer on ESP32 for critical alerts (flame, gas, speed)
+    if (severity === 'critical' && this.client?.connected) {
+      this.publishCommand({ command: 'ALERT_BUZZER' });
+    }
   }
 
   get alerts() {
@@ -232,20 +236,49 @@ export class MqttService implements OnModuleInit, OnModuleDestroy {
       const data = JSON.parse(payload) as { speed_kmh?: number; elapsed_ms?: number };
       this._lastSpeed = { ...data, updatedAt: new Date().toISOString() };
       this.logger.log(`Speed update: ${data.speed_kmh ?? '?'} km/h`);
-      const kmh = data.speed_kmh ?? 0;
-      const limit = 10;
-      if (kmh > limit) {
-        this._pushAlert(
-          'speed',
-          kmh > 25 ? 'critical' : 'warning',
-          kmh > 25 ? '🚨 Viteză depășită' : '⚠️ Viteză ridicată',
-          `${kmh.toFixed(1)} km/h (limita ${limit} km/h)`,
-          kmh,
-          limit,
-        );
-      }
+      // Speed alerts disabled — IR beam distance on scale model causes
+      // unrealistic readings (e.g. 360 km/h). Use demo trigger instead.
     } catch {
       this.logger.warn(`Failed to parse speed payload: ${payload}`);
+    }
+  }
+
+  /** Camera confirmation mock: 'correct' logs silently; 'wrong' fires a critical alert */
+  cameraConfirmAlert(spotName: string, result: 'correct' | 'wrong') {
+    if (result === 'wrong') {
+      this._pushAlertRaw({
+        id: `cam-${++this._alertCounter}-${Date.now()}`,
+        type: 'camera' as 'speed',
+        severity: 'critical',
+        title: '📷 Mașină neautorizată detectată',
+        detail: `Camera a detectat o mașină nepotrivită pe locul ${spotName}`,
+        value: null,
+        threshold: null,
+        timestamp: new Date().toISOString(),
+        read: false,
+      });
+      if (this.client?.connected) {
+        this.publishCommand({ command: 'ALERT_BUZZER' });
+      }
+      this.logger.warn(`[CAMERA ALERT] Wrong car on spot ${spotName}`);
+    } else {
+      if (this.client?.connected) {
+        this.publishCommand({ command: 'CONFIRM_BEEP', spot: spotName });
+      }
+      this.logger.log(`[CAMERA OK] Spot ${spotName} confirmed correct — CONFIRM_BEEP sent`);
+    }
+  }
+
+  /** Trigger a demo alert with realistic values and activate ALERT_BUZZER */
+  triggerDemoAlert(type: 'speed' | 'flame' | 'gas' | 'temperature') {
+    if (type === 'speed') {
+      this._pushAlert('speed', 'critical', '🚨 Viteză depășită', '28.5 km/h (limita 10 km/h)', 28.5, 10);
+    } else if (type === 'flame') {
+      this._pushAlert('flame', 'critical', '🔥 Flacără detectată', 'Senzor flacără 1 activ');
+    } else if (type === 'gas') {
+      this._pushAlert('gas', 'critical', '💨 Nivel gaz ridicat', 'MQ-4 #1: 1050 (prag 1000)', 1050, 1000);
+    } else if (type === 'temperature') {
+      this._pushAlert('temperature', 'critical', '🌡️ Temperatură critică', '42.0°C (prag 40°C)', 42.0, 40);
     }
   }
 
@@ -314,6 +347,14 @@ export class MqttService implements OnModuleInit, OnModuleDestroy {
 
     this.logger.log(`Sensor update: ${spotName} → ${status}`);
     await this.publishAllSpotStatuses();
+
+    // Notify ESP32 to update LED + beep when camera detects a vehicle
+    if (this.client?.connected) {
+      const cmd = status === 'occupied'
+        ? { command: 'VEHICLE_DETECTED', spot: spotName }
+        : { command: 'VEHICLE_LEFT',    spot: spotName };
+      this.publishCommand(cmd);
+    }
   }
 
   /** Physical QR scanner at the barrier scanned a user QR code */

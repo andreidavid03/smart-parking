@@ -8,7 +8,7 @@
   ],
 
   "mqtt": {
-    "broker": "192.168.1.186",
+    "broker": "172.20.8.71",
     "port": 1883,
     "topic_prefix": "parking/sensor"
   },

@@ -37,9 +37,9 @@
 
 // ─── Configuration ────────────────────────────────────────────────────────────
 // Replace with your actual Wi-Fi credentials and the local IP of your PC.
-const char* WIFI_SSID      = "thezuni-1";
-const char* WIFI_PASSWORD  = "0744804859";
-const char* MQTT_BROKER   = "192.168.1.210";     // PC local IP (runs Mosquitto)
+const char* WIFI_SSID      = "campus";
+const char* WIFI_PASSWORD  = "barcelona";
+const char* MQTT_BROKER   = "172.20.8.71";        // PC local IP (runs Mosquitto)
 const int   MQTT_PORT      = 1883;
 const char* MQTT_CLIENT_ID = "smart-parking-esp32";
 
@@ -59,7 +59,7 @@ const char* TOPIC_DIAG       = "parking/diagnostics";
 
 // MQ-4 gas sensors — ADC1 pins, safe to use with WiFi active
 #define MQ4_PIN_1    32   // GPIO32 — MQ-4 left side
-#define MQ4_PIN_2    33   // GPIO33 — MQ-4 right side
+#define MQ4_PIN_2    33   // GPIO33 — MQ-4 right side (DECONECTAT — mock în cod)
 
 // Flame sensors — digital only
 #define FLAME_PIN_1  25   // GPIO25 — Flame sensor left side  (LOW = flame)
@@ -75,6 +75,9 @@ const int SERVO_EXIT_PIN    = 19;   // GPIO19 — exit barrier servo signal
 const int SERVO_OPEN        = 90;   // degrees — open position
 const int SERVO_CLOSED      = 0;    // degrees — closed position
 const int OPEN_DELAY_MS     = 4000; // ms barrier stays open
+
+// Buzzer activ
+#define BUZZER_PIN   13   // GPIO13 — buzzer activ (VCC=5V sau 3.3V, GND=GND)
 
 // WS2812B LED strip
 #define LED_PIN      5    // D5 — data line to WS2812B DIN (use 330Ω resistor in series)
@@ -104,6 +107,7 @@ bool reservedB[5]  = {false};
 bool          ir1Triggered   = false;   // beam 1 currently broken
 unsigned long ir1Time        = 0;       // millis when beam 1 first broke
 bool          speedArmed     = false;   // waiting for beam 2 after beam 1
+unsigned long lastArmPrint   = 0;       // debounce: nu spama Serial cu arm mesaje
 
 // Millis timestamp of last environment publish
 unsigned long lastEnvPublish  = 0;
@@ -160,6 +164,8 @@ void setup() {
   pinMode(MQ4_PIN_2,   INPUT);
   pinMode(FLAME_PIN_1, INPUT_PULLUP);
   pinMode(FLAME_PIN_2, INPUT_PULLUP);
+  pinMode(BUZZER_PIN, OUTPUT);
+  digitalWrite(BUZZER_PIN, LOW);
   Serial.println("Sensor pins initialised");
 
   connectWiFi();
@@ -217,7 +223,11 @@ void checkSpeedTrap() {
   if (b1 && !speedArmed) {
     speedArmed  = true;
     ir1Time     = now;
-    Serial.println("[SPEED] Beam 1 broken — armed");
+    // print doar o dată la 5s ca să nu spamăm Serial Monitor
+    if (now - lastArmPrint > 5000) {
+      Serial.println("[SPEED] Arm");
+      lastArmPrint = now;
+    }
   }
 
   // Second beam breaks while armed → calculate speed
@@ -242,7 +252,6 @@ void checkSpeedTrap() {
   // Timeout — reset if beam 2 never broke within 3 s
   if (speedArmed && (now - ir1Time > 3000)) {
     speedArmed = false;
-    Serial.println("[SPEED] Timeout — resetting");
   }
 }
 
@@ -256,8 +265,8 @@ void publishEnvironment() {
   // BMP280 mock — valori simulate realiste
   float tempBMP  = 20.0 + (random(0, 80) / 10.0);   // 20.0–28.0 °C
   float pressure = 1010.0 + (random(0, 150) / 10.0); // 1010–1025 hPa
-  int   gas1        = analogRead(MQ4_PIN_1);         // 0–4095
-  int   gas2        = analogRead(MQ4_PIN_2);
+  int   gas1        = analogRead(MQ4_PIN_1);         // 0–4095 — senzor real
+  int   gas2        = 180;                           // mock — MQ-4 #2 deconectat (valoare aer curat)
   bool  flame1      = false; // mock — pinii flotanți produc fals pozitiv
   bool  flame2      = false;
 
@@ -307,12 +316,12 @@ void publishDiagnostics() {
   doc["ir2_ok"]  = true;
 
   // MQ-4 gas sensors (raw ADC 0–4095)
-  int gas1 = analogRead(MQ4_PIN_1);
-  int gas2 = analogRead(MQ4_PIN_2);
+  int gas1 = analogRead(MQ4_PIN_1);  // senzor real
+  int gas2 = 180;                    // mock — MQ-4 #2 deconectat
   doc["gas1_raw"] = gas1;
   doc["gas2_raw"] = gas2;
-  doc["gas1_ok"]  = (gas1 > 0);   // 0 means sensor not connected
-  doc["gas2_ok"]  = (gas2 > 0);
+  doc["gas1_ok"]  = (gas1 > 0);
+  doc["gas2_ok"]  = false;  // mock, marcat ca offline
 
   // Flame sensors (raw digital, LOW=flame)
   doc["flame1_raw"]     = 1; // mock HIGH (nicio flacără)
@@ -403,6 +412,7 @@ void onMqttMessage(char* topic, byte* payload, unsigned int length) {
     snprintf(line2, sizeof(line2), "Mergi la loc: %s", spot);
     lcdShow("Bine ai venit!", line2);
     markSpotOccupied(String(spot));
+    beepSuccess();
     openEntryBarrier();
     lcdShow("Gata!", "Scanati QR...");
 
@@ -412,6 +422,7 @@ void onMqttMessage(char* topic, byte* payload, unsigned int length) {
     if (strlen(spot) > 0) {
       markSpotFree(String(spot));
     }
+    beepExit();
     openExitBarrier();
     delay(1000);
     lcdShow("Gata!", "Scanati QR...");
@@ -422,6 +433,7 @@ void onMqttMessage(char* topic, byte* payload, unsigned int length) {
     char line2[17];
     snprintf(line2, sizeof(line2), "Rezervat: %s", spot);
     lcdShow("Loc rezervat!", line2);
+    beepReserved();
     markSpotReserved(String(spot));
     delay(1500);
     lcdShow("Gata!", "Scanati QR...");
@@ -430,6 +442,51 @@ void onMqttMessage(char* topic, byte* payload, unsigned int length) {
     // Reservation cancelled → back to GREEN
     Serial.printf("→ Anulare rezervare %s\n", spot);
     markSpotUnreserved(String(spot));
+
+  } else if (strcmp(command, "WRONG_SPOT") == 0) {
+    // User parked in wrong spot
+    Serial.printf("→ Loc greșit: %s\n", spot);
+    char line2[17];
+    snprintf(line2, sizeof(line2), "Mergi la: %s", spot);
+    lcdShow("Loc gresit!", line2);
+    beepWrongSpot();
+    delay(3000);
+    lcdShow("Gata!", "Scanati QR...");
+
+  } else if (strcmp(command, "CONFIRM_BEEP") == 0) {
+    // Cameră a confirmat mașina corectă pe loc
+    Serial.printf("→ Camera OK — mașină confirmată pe locul %s\n", spot);
+    char line2[17];
+    snprintf(line2, sizeof(line2), "Loc: %s OK", spot);
+    lcdShow("Camera: OK!", line2);
+    beepConfirm();
+    delay(1500);
+    lcdShow("Gata!", "Scanati QR...");
+
+  } else if (strcmp(command, "ALERT_BUZZER") == 0) {
+    // Alertă critică de la backend (gaz/flacără/viteză)
+    Serial.println("→ ALERTĂ CRITICĂ — buzzer activat");
+    lcdShow("ALERTA!", "Verificati sensor");
+    beepAlert();
+    delay(2000);
+    lcdShow("Gata!", "Scanati QR...");
+
+  } else if (strcmp(command, "VEHICLE_DETECTED") == 0) {
+    // Cameră a detectat vehicul în loc — actualizează LED + beep scurt
+    Serial.printf("→ Vehicul detectat (cameră): %s\n", spot);
+    markSpotOccupied(String(spot));
+    char line2[17];
+    snprintf(line2, sizeof(line2), "Loc: %s", spot);
+    lcdShow("Vehicul detectat", line2);
+    digitalWrite(BUZZER_PIN, HIGH); delay(80);
+    digitalWrite(BUZZER_PIN, LOW);
+    delay(1500);
+    lcdShow("Gata!", "Scanati QR...");
+
+  } else if (strcmp(command, "VEHICLE_LEFT") == 0) {
+    // Cameră a detectat că mașina a plecat — LED verde
+    Serial.printf("→ Loc eliberat (cameră): %s\n", spot);
+    markSpotFree(String(spot));
 
   } else {
     Serial.printf("[MQTT] Unknown command '%s' – ignoring.\n", command);
@@ -452,6 +509,58 @@ void onMqttMessage(char* topic, byte* payload, unsigned int length) {
  *     barrierServo.write(0);    // rotate back to closed position
  *   }
  */
+// ─── Buzzer helpers ─────────────────────────────────────────────────────────
+// Buzzer activ: HIGH = pornit, LOW = oprit
+
+void beepConfirm() {
+  // 2 beep-uri scurte ascendente — cameră confirmă mașina corectă
+  digitalWrite(BUZZER_PIN, HIGH); delay(80);
+  digitalWrite(BUZZER_PIN, LOW);  delay(60);
+  digitalWrite(BUZZER_PIN, HIGH); delay(140);
+  digitalWrite(BUZZER_PIN, LOW);
+}
+
+void beepSuccess() {
+  // 2 beep-uri scurte — QR OK, barieră deschisă, parcare corectă
+  for (int i = 0; i < 2; i++) {
+    digitalWrite(BUZZER_PIN, HIGH); delay(120);
+    digitalWrite(BUZZER_PIN, LOW);  delay(100);
+  }
+}
+
+void beepExit() {
+  // 1 beep lung — ieșire OK
+  digitalWrite(BUZZER_PIN, HIGH); delay(400);
+  digitalWrite(BUZZER_PIN, LOW);
+}
+
+void beepReserved() {
+  // 1 beep scurt — confirmare rezervare
+  digitalWrite(BUZZER_PIN, HIGH); delay(150);
+  digitalWrite(BUZZER_PIN, LOW);
+}
+
+void beepWrongSpot() {
+  // 3 beep-uri rapide + 1 lung — loc greșit!
+  for (int i = 0; i < 3; i++) {
+    digitalWrite(BUZZER_PIN, HIGH); delay(80);
+    digitalWrite(BUZZER_PIN, LOW);  delay(80);
+  }
+  delay(100);
+  digitalWrite(BUZZER_PIN, HIGH); delay(500);
+  digitalWrite(BUZZER_PIN, LOW);
+}
+
+void beepAlert() {
+  // Alarmă urgentă: 5 beep-uri rapide — gaz/flacără/viteză critică
+  for (int i = 0; i < 5; i++) {
+    digitalWrite(BUZZER_PIN, HIGH); delay(100);
+    digitalWrite(BUZZER_PIN, LOW);  delay(80);
+  }
+}
+
+// ─── Barrier functions ───────────────────────────────────────────────────────
+
 void openEntryBarrier() {
   Serial.println("[ENTRY] Opening entry barrier...");
   entryServo.write(SERVO_OPEN);

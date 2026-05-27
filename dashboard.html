@@ -180,6 +180,35 @@
     ::-webkit-scrollbar { width:3px; }
     ::-webkit-scrollbar-thumb { background:var(--surface2); border-radius:2px; }
 
+    /* DEMO PANEL */
+    .demo-panel { background:var(--surface); border-radius:12px;
+      border:2px solid rgba(250,179,135,.5); overflow:hidden; }
+    .demo-ph { padding:9px 16px; background:rgba(250,179,135,.08);
+      border-bottom:2px solid rgba(250,179,135,.35);
+      font-size:12px; font-weight:800; color:var(--orange);
+      text-transform:uppercase; letter-spacing:.08em;
+      display:flex; align-items:center; gap:8px; }
+    .demo-grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(175px,1fr)); gap:10px; padding:14px 16px; }
+    .dbtn { border:none; border-radius:9px; padding:13px 10px;
+      font-size:12px; font-weight:800; cursor:pointer; transition:all .15s;
+      display:flex; flex-direction:column; align-items:center; gap:5px; line-height:1.3; }
+    .dbtn .dico { font-size:26px; }
+    .dbtn:hover { filter:brightness(1.18); transform:translateY(-1px); }
+    .dbtn:active { transform:translateY(0); }
+    .dbtn.barrier-in  { background:rgba(166,227,161,.15); color:var(--green); border:1px solid rgba(166,227,161,.4); }
+    .dbtn.barrier-out { background:rgba(137,180,250,.12); color:var(--blue);  border:1px solid rgba(137,180,250,.4); }
+    .dbtn.d-speed     { background:rgba(243,139,168,.15); color:var(--red);   border:1px solid rgba(243,139,168,.4); }
+    .dbtn.d-flame     { background:rgba(243,139,168,.1);  color:var(--red);   border:1px solid rgba(243,139,168,.35); }
+    .dbtn.d-gas       { background:rgba(249,226,175,.12); color:var(--yellow);border:1px solid rgba(249,226,175,.4); }
+    .dbtn.d-temp      { background:rgba(203,166,247,.12); color:var(--purple);border:1px solid rgba(203,166,247,.4); }
+    .dbtn.d-mock      { background:rgba(148,226,213,.12); color:var(--teal);  border:1px solid rgba(148,226,213,.4); }
+    .dbtn.d-reset     { background:var(--surface2); color:var(--muted); border:1px solid var(--border); }
+    .dbtn.d-scenario  { background:rgba(250,179,135,.15); color:var(--orange);border:2px solid rgba(250,179,135,.5);
+      grid-column:span 2; flex-direction:row; padding:14px 18px; justify-content:center; gap:10px; font-size:13px; }
+    @media(max-width:600px) { .dbtn.d-scenario { grid-column:span 1; } }
+    #demo-status { padding:6px 16px 10px; font-size:12px; color:var(--sub); font-family:monospace;
+      border-top:1px solid rgba(250,179,135,.2); min-height:28px; }
+
     /* MQTT LOG */
     #mqtt-log { height:220px; overflow-y:auto; font-family:monospace; font-size:11px; }
     .ml { padding:3px 4px; border-bottom:1px solid rgba(69,71,90,.2);
@@ -208,6 +237,57 @@
 </div>
 
 <div class="main">
+
+  <!-- DEMO PANEL -->
+  <div class="demo-panel">
+    <div class="demo-ph">🎬 Simulare Prezentare
+      <span style="font-size:10px;font-weight:400;color:var(--muted);text-transform:none;letter-spacing:0;margin-left:auto">Butoane rapide pentru demo — funcționează și fără hardware fizic</span>
+    </div>
+    <div class="demo-grid">
+      <button class="dbtn d-scenario" onclick="runFullScenario()">
+        <span class="dico">🎬</span> Scenariu Complet Auto
+        <span style="font-size:10px;font-weight:400;color:inherit;opacity:.8">(intrare → 6s → ieșire)</span>
+      </button>
+      <button class="dbtn barrier-in" onclick="demoBarrier('OPEN_ENTRY')">
+        <span class="dico">🟢</span> Deschide Barieră
+      </button>
+      <button class="dbtn d-speed" onclick="demoSpeedAlert()">
+        <span class="dico">🚨</span> Alertă Viteză<br><span style="font-size:10px;font-weight:400">25 km/h depășit</span>
+      </button>
+      <button class="dbtn d-flame" onclick="demoFlame()">
+        <span class="dico">🔥</span> Alertă Flacără<br><span style="font-size:10px;font-weight:400">flame1 = detectat</span>
+      </button>
+      <button class="dbtn d-gas" onclick="demoGas()">
+        <span class="dico">💨</span> Alertă Gaz<br><span style="font-size:10px;font-weight:400">MQ-4 = 800 ppm</span>
+      </button>
+      <button class="dbtn d-temp" onclick="demoTemp()">
+        <span class="dico">🌡️</span> Temperatură Critică<br><span style="font-size:10px;font-weight:400">42°C</span>
+      </button>
+      <button class="dbtn d-mock" onclick="demoMockAlerts()">
+        <span class="dico">📋</span> Generează Alerte<br><span style="font-size:10px;font-weight:400">populate AdminAlerts</span>
+      </button>
+      <button class="dbtn d-reset" onclick="demoReset()">
+        <span class="dico">↺</span> Reset Simulări
+      </button>
+    </div>
+    <div id="demo-status">Apasă un buton pentru a simula un eveniment.</div>
+
+    <!-- Camera confirmation mock -->
+    <div style="padding:10px 16px 14px;border-top:1px solid var(--border)">
+      <div style="font-size:11px;color:var(--muted);margin-bottom:8px;font-weight:600;letter-spacing:.04em;text-transform:uppercase">📷 Confirmare Cameră — selectează locul:</div>
+      <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+        <select id="cam-confirm-spot" style="background:var(--surface3);border:1px solid var(--border);border-radius:6px;color:var(--text);padding:6px 10px;font-size:13px;cursor:pointer">
+          <option value="">— alege loc —</option>
+        </select>
+        <button class="dbtn" style="background:rgba(166,227,161,.15);color:#a6e3a1;border:1px solid rgba(166,227,161,.35);padding:8px 16px;flex:1;min-width:140px" onclick="cameraConfirm('correct')">
+          ✅ Mașină Corectă<br><span style="font-size:10px;font-weight:400;opacity:.8">Camera confirmă rezervarea</span>
+        </button>
+        <button class="dbtn" style="background:rgba(243,139,168,.15);color:#f38ba8;border:1px solid rgba(243,139,168,.35);padding:8px 16px;flex:1;min-width:140px" onclick="cameraConfirm('wrong')">
+          ❌ Mașină Greșită<br><span style="font-size:10px;font-weight:400;opacity:.8">Alertă loc nepotrivit + buzzer</span>
+        </button>
+      </div>
+    </div>
+  </div>
 
   <!-- ROW 1: Hardware scanner + Mock scan -->
   <div class="top-row">
@@ -428,6 +508,14 @@
   // state
   let bySpot = {};
   let scans = 0, errors = 0, sensorEvents = 0;
+  let _lastSensorData = {};
+  let _allSpots = [];
+
+  // Flame invert state (stored in localStorage)
+  const flameInvert = {
+    1: localStorage.getItem('flame-invert-1') === 'true',
+    2: localStorage.getItem('flame-invert-2') === 'true',
+  };
 
   // clock
   setInterval(() => {
@@ -495,11 +583,11 @@
       pill('pill-users', 'idle', `Users: ${(d.users||[]).length}`);
 
       bySpot = {};
-      d.activeSessions.forEach(s => { bySpot[s.spot.name] = s; });
+      (d.activeSessions || []).forEach(s => { if (s?.spot) bySpot[s.spot.name] = s; });
 
       renderSpots(d.spots);
-      renderSessions(d.activeSessions);
-      renderUsers(d.users || [], d.activeSessions);
+      renderSessions(d.activeSessions || []);
+      renderUsers(d.users || [], d.activeSessions || []);
       renderSensors(d);
 
       diag('dbg-refresh', 'ok', 'Last refresh', new Date().toLocaleTimeString());
@@ -565,12 +653,6 @@
     card.className = 'scard ' + (warnFn ? warnFn(value) : 'ok');
   }
 
-  // ── Flame invert state (stored in localStorage) ───────────────────
-  const flameInvert = {
-    1: localStorage.getItem('flame-invert-1') === 'true',
-    2: localStorage.getItem('flame-invert-2') === 'true',
-  };
-
   function toggleFlameInvert(n) {
     flameInvert[n] = !flameInvert[n];
     localStorage.setItem(`flame-invert-${n}`, flameInvert[n]);
@@ -597,7 +679,6 @@
   }
 
   // ── Manual override state ──────────────────────────────────────────
-  let _lastSensorData = {}; // ultima valoare MQTT
 
   function toggleManualPanel() {
     const body = document.getElementById('manual-panel-body');
@@ -764,6 +845,15 @@
   }
 
   function renderSpots(spots) {
+    _allSpots = spots || [];
+    // Populate camera confirm dropdown
+    const sel = document.getElementById('cam-confirm-spot');
+    if (sel) {
+      const prev = sel.value;
+      sel.innerHTML = '<option value="">— alege loc —</option>' +
+        _allSpots.map(s => `<option value="${esc(s.name)}">${esc(s.name)}</option>`).join('');
+      if (prev) sel.value = prev;
+    }
     const g = document.getElementById('spots-grid');
     if (!spots?.length) {
       g.innerHTML = '<p style="color:var(--muted)">No spots configured.</p>';
@@ -866,6 +956,35 @@
       log(`[SENSOR ✗] ${e.message}`, 'err');
       errors++;
       diag('dbg-errors', 'err', 'Errors', errors);
+    }
+    setTimeout(doRefresh, 600);
+  }
+
+  // ── Camera confirmation mock ────────────────────────────────────────
+  async function cameraConfirm(result) {
+    const spot = document.getElementById('cam-confirm-spot').value;
+    if (!spot) { setDemoStatus('⚠️ Selectează un loc din dropdown mai întâi!'); return; }
+    try {
+      const r = await fetch(`${API}/parking/camera-confirm`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ spotName: spot, result }),
+      });
+      const d = await r.json();
+      if (d.ok) {
+        if (result === 'correct') {
+          setDemoStatus(`✅ Camera confirmă: mașina de pe locul ${spot} corespunde rezervării.`);
+          log(`[CAMERA ✓] Loc ${spot} — mașină verificată, rezervare validă`, 'ok');
+        } else {
+          setDemoStatus(`❌ Alertă: mașină neautorizată detectată pe locul ${spot}! Buzzer activat.`);
+          log(`[CAMERA ✗] Loc ${spot} — mașină neautorizată → alertă critică + ALERT_BUZZER`, 'err');
+        }
+      } else {
+        setDemoStatus(`Eroare: ${JSON.stringify(d)}`);
+      }
+    } catch(e) {
+      setDemoStatus(`Eroare conexiune: ${e.message}`);
+      log(`[CAMERA ERR] ${e.message}`, 'err');
     }
     setTimeout(doRefresh, 600);
   }
@@ -1059,6 +1178,157 @@
   }
 
   function clearMqttLog() { document.getElementById('mqtt-log').innerHTML = ''; }
+
+  // ── Demo helpers ───────────────────────────────────────────────────
+  function demoStatus(msg) {
+    const el = document.getElementById('demo-status');
+    if (el) el.textContent = `▶ ${msg}`;
+  }
+
+  async function demoBarrier(cmd) {
+    demoStatus(`Trimit comanda ${cmd} către ESP32...`);
+    log(`[DEMO] Barieră: ${cmd}`, 'ok');
+    try {
+      const r = await fetch(`${API}/parking/open-barrier`, {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({ command: cmd }),
+      });
+      const d = await r.json();
+      if (d.ok) {
+        demoStatus(`✓ ${cmd} trimis — ESP32 deschide bariera ${cmd === 'OPEN_ENTRY' ? 'de intrare' : 'de ieșire'} (4 secunde)`);
+        log(`[DEMO ✓] MQTT: parking/commands → ${JSON.stringify({command: cmd})}`, 'ok');
+      } else {
+        demoStatus(`✗ Eroare: ${JSON.stringify(d)}`);
+        log(`[DEMO ✗] open-barrier: ${JSON.stringify(d)}`, 'err');
+      }
+    } catch(e) {
+      demoStatus(`✗ Rețea: ${e.message} — verifică că backend-ul e pornit`);
+      log(`[DEMO ✗] ${e.message}`, 'err');
+    }
+  }
+
+  async function demoSpeedAlert() {
+    demoStatus('⏳ Declanșez alertă viteză + ALERT_BUZZER...');
+    try {
+      const r = await fetch(`${API}/parking/alerts/trigger`, { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({ type: 'speed' }) });
+      const d = await r.json();
+      if (d.ok) {
+        demoStatus('✓ Alertă viteză: 28.5 km/h → ESP32 buzzer activat, alertă în app');
+        log('[DEMO ✓] Speed alert triggered + ALERT_BUZZER', 'ok');
+      }
+    } catch(e) { demoStatus(`✗ ${e.message}`); }
+  }
+
+  async function demoFlame() {
+    demoStatus('⏳ Declanșez alertă flacără + ALERT_BUZZER...');
+    try {
+      const r = await fetch(`${API}/parking/alerts/trigger`, { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({ type: 'flame' }) });
+      const d = await r.json();
+      if (d.ok) {
+        demoStatus('✓ Alertă flacără critică → ESP32 buzzer activat, alertă în app');
+        log('[DEMO ✓] Flame alert triggered + ALERT_BUZZER', 'err');
+      }
+    } catch(e) { demoStatus(`✗ ${e.message}`); }
+  }
+
+  async function demoGas() {
+    demoStatus('⏳ Declanșez alertă gaz + ALERT_BUZZER...');
+    try {
+      const r = await fetch(`${API}/parking/alerts/trigger`, { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({ type: 'gas' }) });
+      const d = await r.json();
+      if (d.ok) {
+        demoStatus('✓ Alertă gaz critic: MQ-4 1050 ppm → ESP32 buzzer activat, alertă în app');
+        log('[DEMO ✓] Gas alert triggered + ALERT_BUZZER', 'warn');
+      }
+    } catch(e) { demoStatus(`✗ ${e.message}`); }
+  }
+
+  function demoTemp() {
+    const inp = document.getElementById('mo-temp');
+    if (inp) { inp.value = 42; applyManualOverrides(); }
+    demoStatus('✓ Temperatură simulată: 42°C — nivel CRITIC (>40°C). Resetează cu butonul Reset.');
+    log('[DEMO] Temperatură = 42°C — alertă critică', 'err');
+    fetch(`${API}/parking/alerts/mock`, { method: 'POST' }).catch(() => {});
+  }
+
+  async function demoMockAlerts() {
+    demoStatus('Generez alerte demo în backend...');
+    try {
+      const r = await fetch(`${API}/parking/alerts/mock`, { method: 'POST' });
+      const d = await r.json();
+      if (d.ok) {
+        demoStatus('✓ 6 alerte demo adăugate — deschide AdminAlertsScreen în aplicație pentru a le vedea');
+        log('[DEMO] Mock alerts generate — /parking/alerts', 'ok');
+      }
+    } catch(e) {
+      demoStatus(`✗ ${e.message}`);
+    }
+  }
+
+  function demoReset() {
+    clearManualOverrides();
+    demoStatus('↺ Toate simulările resetate — senzori revin la datele MQTT live.');
+    log('[DEMO] Simulări resetate', 'info');
+  }
+
+  let _scenarioRunning = false;
+  async function runFullScenario() {
+    if (_scenarioRunning) { demoStatus('⚠ Scenariul rulează deja...'); return; }
+
+    // Find first non-parked user with QR
+    const users = document.querySelectorAll('.user-card');
+    let entryBtn = null;
+    let exitBtn = null;
+    let userEmail = '';
+    for (const card of users) {
+      const entry = card.querySelector('.entry-btn');
+      const exit  = card.querySelector('.exit-btn');
+      if (entry && !entry.disabled) { entryBtn = entry; userEmail = card.querySelector('.user-email')?.textContent || ''; break; }
+    }
+
+    if (!entryBtn) {
+      // Everyone is parked — try exit first, then re-check
+      demoStatus('⚠ Toți utilizatorii sunt deja parcați. Încearcă butonul "📷 Exit barieră" pentru unul dintre ei mai întâi.');
+      log('[DEMO] Nu există utilizator disponibil pentru intrare', 'warn');
+      return;
+    }
+
+    _scenarioRunning = true;
+    demoStatus(`▶ SCENARIU: Intrare pentru ${userEmail}...`);
+    log(`[DEMO SCENARIU] Start — utilizator: ${userEmail}`, 'info');
+
+    entryBtn.click();
+    await new Promise(r => setTimeout(r, 1000));
+    demoStatus(`✓ Intrare procesată pentru ${userEmail} — bariera de intrare s-a deschis. Aștept 6s...`);
+
+    await new Promise(r => setTimeout(r, 6000));
+
+    // Re-find exit button for this user
+    await doRefresh();
+    await new Promise(r => setTimeout(r, 500));
+
+    const updatedCards = document.querySelectorAll('.user-card');
+    for (const card of updatedCards) {
+      const emailEl = card.querySelector('.user-email');
+      if (emailEl?.textContent === userEmail) {
+        exitBtn = card.querySelector('.exit-btn');
+        break;
+      }
+    }
+
+    if (exitBtn && !exitBtn.disabled) {
+      demoStatus(`▶ SCENARIU: Ieșire pentru ${userEmail}...`);
+      exitBtn.click();
+      await new Promise(r => setTimeout(r, 800));
+      demoStatus(`✓ SCENARIU COMPLET — ${userEmail}: intrare → sesiune → ieșire → bariera deschisă 🎉`);
+      log(`[DEMO SCENARIU ✓] Complet pentru ${userEmail}`, 'ok');
+    } else {
+      demoStatus('✓ Intrare OK — nu am putut găsi butonul de ieșire (refresh și încearcă manual)');
+    }
+
+    _scenarioRunning = false;
+  }
 
   // ── Boot ───────────────────────────────────────────────────────────
   log('Dashboard loaded. Connecting to http://localhost:3000…', 'info');

@@ -100,6 +100,32 @@ def update_flutter_ip(ip_address):
         print_error(f"Eroare la actualizare IP: {e}")
         return False
 
+def update_esp32_ip(ip_address):
+    """Actualizează MQTT_BROKER în sketch-ul ESP32"""
+    sketch_path = Path(__file__).parent / "apps/esp32/smart_parking_esp32/smart_parking_esp32.ino"
+
+    if not sketch_path.exists():
+        print_warning(f"Sketch ESP32 nu găsit: {sketch_path}")
+        return False
+
+    try:
+        content = sketch_path.read_text()
+        import re
+        new_content = re.sub(
+            r'(const char\* MQTT_BROKER\s*=\s*")[^"]+(")',
+            rf'\g<1>{ip_address}\g<2>',
+            content
+        )
+        if new_content != content:
+            sketch_path.write_text(new_content)
+            print_success(f"MQTT_BROKER actualizat în ESP32 sketch: {ip_address}")
+        else:
+            print_info("MQTT_BROKER este deja setat corect în sketch")
+        return True
+    except Exception as e:
+        print_error(f"Eroare la actualizare sketch ESP32: {e}")
+        return False
+
 def check_docker():
     """Verifică dacă Docker este pornit"""
     try:
@@ -361,7 +387,9 @@ def main():
     if not update_flutter_ip(ip_address):
         print_error("Nu pot actualiza IP-ul în Flutter")
         sys.exit(1)
-    
+
+    update_esp32_ip(ip_address)
+
     # Step 2: Check and start Docker (fallback to Homebrew)
     print_info("\nPas 2/5: Verific Docker...")
     if check_docker():

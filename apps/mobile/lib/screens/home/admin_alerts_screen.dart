@@ -18,8 +18,12 @@ class _AdminAlertsScreenState extends State<AdminAlertsScreen> {
   @override
   void initState() {
     super.initState();
-    _load();
+    _loadAndMarkRead();
     _timer = Timer.periodic(const Duration(seconds: 5), (_) => _load());
+  }
+
+  Future<void> _loadAndMarkRead() async {
+    await _load();
     ApiService.markAlertsRead();
   }
 

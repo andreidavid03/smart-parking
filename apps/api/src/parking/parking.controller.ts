@@ -101,6 +101,31 @@ export class ParkingController {
     return { ok: true, message: 'Mock alerts added' };
   }
 
+  @Post('alerts/trigger')
+  triggerDemoAlert(@Body('type') type: string) {
+    const allowed = ['speed', 'flame', 'gas', 'temperature'];
+    if (!allowed.includes(type)) {
+      throw new BadRequestException(`type must be one of: ${allowed.join(', ')}`);
+    }
+    this.mqttService.triggerDemoAlert(type as 'speed' | 'flame' | 'gas' | 'temperature');
+    return { ok: true, message: `Demo alert '${type}' triggered with ALERT_BUZZER` };
+  }
+
+  @Post('camera-confirm')
+  cameraConfirm(
+    @Body('spotName') spotName: string,
+    @Body('result') result: string,
+  ) {
+    if (!spotName?.trim()) {
+      throw new BadRequestException('spotName is required');
+    }
+    if (result !== 'correct' && result !== 'wrong') {
+      throw new BadRequestException('result must be "correct" or "wrong"');
+    }
+    this.mqttService.cameraConfirmAlert(spotName.trim(), result as 'correct' | 'wrong');
+    return { ok: true, spotName: spotName.trim(), result };
+  }
+
   @Post('mock-sensor')
   mockSensor(
     @Body('spotName') spotName: string,

@@ -444,6 +444,10 @@ figure_placeholder(doc, 1,
     'Diagrama arhitecturii sistemului – flux de la barieră la aplicația mobilă.',
     height_cm=5.0)
 
+figure_placeholder(doc, 2,
+    'Diagrama secvență – flux complet acces QR intrare/ieșire cu MQTT.',
+    height_cm=5.5)
+
 subheading(doc, '3.1. Hardware IoT – Control & Acces')
 body(doc,
     'Subsistemul de control al accesului este construit în jurul unui microcontroler '
@@ -459,7 +463,7 @@ body(doc,
     '(AI Thinker, senzor OV2640, rezoluție 1280×720) transmite flux video '
     'MJPEG către modulul Python OpenCV.')
 
-figure_placeholder(doc, 2,
+figure_placeholder(doc, 3,
     'Ansamblu machetă – ESP32, servomotoare, LCD și strip LED WS2812B.',
     height_cm=5.0)
 
@@ -478,7 +482,7 @@ body(doc,
     'topic-ul MQTT parking/environment la fiecare 5 secunde și vizualizate '
     'în dashboardul de administrator.')
 
-figure_placeholder(doc, 3,
+figure_placeholder(doc, 4,
     'Senzori de protecție – LM393 speed trap, MQ-4, senzori flacără, DHT11, BMP280.',
     height_cm=4.5)
 
@@ -492,6 +496,20 @@ body(doc,
     '(scanare QR intrare/ieșire). Baza de date PostgreSQL 16 este gestionată '
     'prin Prisma ORM cu migrări versionare. Brokerul Mosquitto MQTT '
     'rulează pe portul 1883 și mediază toată comunicarea hardware.')
+for svc in [
+    '– api (NestJS): port 3000, variabile de mediu DATABASE_URL, JWT_SECRET, SMTP_*;',
+    '– postgres: PostgreSQL 16-alpine, volum persistent pgdata;',
+    '– mosquitto: broker Eclipse MQTT, configurare în infra/mqtt/mosquitto.conf;',
+    '– pgadmin: interfață web de administrare a bazei de date, port 8080.',
+]:
+    para(doc, svc, size=11, sa=2, left_indent=Cm(0.4))
+body(doc,
+    'Schema Prisma definește 5 entități principale: User (qr_code, emailVerified, '
+    'resetToken, carColor, preferredSpot), ParkingSession (userId, spotId, '
+    'startTime, endTime, cost), ParkingSpot (name, status, type), '
+    'SensorData (topic, payload, timestamp) și AdminLog. '
+    'Migrările sunt versionare și reversibile, asigurând consistența schemei '
+    'în medii multiple (development, production).')
 
 subheading(doc, '3.4. Aplicația mobilă Flutter')
 body(doc,
@@ -499,6 +517,18 @@ body(doc,
     'funcționale: Login/Register, Hartă interactivă, Sesiune activă, Istoric sesiuni, '
     'Profil utilizator și Scanner QR (pentru administrator). Comunicarea cu backend-ul '
     'se realizează exclusiv prin HTTPS cu validare JWT la fiecare cerere.')
+body(doc,
+    'Ecranul principal afișează harta interactivă a parcării cu locurile disponibile '
+    'codificate cromatic (verde = liber, roșu = ocupat). La atingerea unui loc liber, '
+    'utilizatorul îl poate rezerva direct, iar aplicația lansează automat navigarea GPS '
+    'prin Google Maps SDK până la locul alocat. Ecranul sesiunii active prezintă un '
+    'cronometru în timp real, locul alocat, costul estimat actualizat la minut și '
+    'butonul de eliberare anticipată. Autentificarea biometrică (Face ID / Touch ID) '
+    'permite login rapid fără parolă, iar istoricul sesiunilor oferă detalii complete '
+    'despre fiecare vizită: durată, loc și cost facturat (Fig. 5).')
+figure_placeholder(doc, 5,
+    'Capturi aplicație Flutter – ecranul hartă locuri în timp real și ecranul sesiunii active.',
+    height_cm=5.5)
 
 # ══════════════════════════════════════════════════════════════════════════
 # 4. IMPLEMENTARE
@@ -528,9 +558,7 @@ body(doc,
     'costul (tarif orar configurat × durată în minute) și îl afișează imediat '
     'în istoricul aplicației mobile.')
 
-figure_placeholder(doc, 4,
-    'Diagrama secvență – flux complet acces QR intrare/ieșire cu MQTT.',
-    height_cm=5.5)
+# Fig. 2 a fost inserată deja în secțiunea 3 (vedere de ansamblu arhitectură)
 
 subheading(doc, '4.2. Detecția video cu OpenCV')
 body(doc,
@@ -543,9 +571,10 @@ body(doc,
     'Starea fiecărui loc este publicată pe MQTT parking/sensor/A1 etc. '
     'la fiecare ciclu de 5 secunde și stocată în PostgreSQL.')
 
-figure_placeholder(doc, 5,
+figure_placeholder(doc, 6,
     'Captură OpenCV – ROI-uri calibrate, locuri libere (verde) și ocupate (roșu).',
     height_cm=4.5)
+
 
 subheading(doc, '4.3. Aplicația mobilă – funcționalități cheie')
 body(doc,
@@ -559,9 +588,10 @@ body(doc,
     'respectiv din parcare. Sesiunea activă afișează un cronometru în timp '
     'real și costul estimat calculat la client.')
 
-figure_placeholder(doc, 6,
+figure_placeholder(doc, 7,
     'Capturi aplicație Flutter – Hartă locuri în timp real și ecran sesiune activă.',
     height_cm=5.5)
+
 
 subheading(doc, '4.4. Securitate multistrat')
 body(doc,

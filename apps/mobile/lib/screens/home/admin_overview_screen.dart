@@ -39,7 +39,7 @@ class _AdminOverviewScreenState extends State<AdminOverviewScreen> {
     _costController.dispose();
     _speedController.dispose();
     super.dispose();
-  }Swx
+  }
 
   Future<void> _loadData() async {
     setState(() => _loading = true);

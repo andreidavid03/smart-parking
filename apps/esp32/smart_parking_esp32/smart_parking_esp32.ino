@@ -37,9 +37,9 @@
 
 // ─── Configuration ────────────────────────────────────────────────────────────
 // Replace with your actual Wi-Fi credentials and the local IP of your PC.
-const char* WIFI_SSID      = "campus";
-const char* WIFI_PASSWORD  = "barcelona";
-const char* MQTT_BROKER   = "172.20.8.71";        // PC local IP (runs Mosquitto)
+const char* WIFI_SSID      = "thezuni-1";
+const char* WIFI_PASSWORD  = "0744804859";
+const char* MQTT_BROKER   = "192.168.1.224";        // PC local IP (runs Mosquitto)
 const int   MQTT_PORT      = 1883;
 const char* MQTT_CLIENT_ID = "smart-parking-esp32";
 

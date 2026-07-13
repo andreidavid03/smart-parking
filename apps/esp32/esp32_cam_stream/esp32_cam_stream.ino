@@ -33,8 +33,8 @@
 #include "esp_http_server.h"
 
 // ─── WiFi ─────────────────────────────────────────────────────────────────────
-const char* WIFI_SSID     = "campus";       // <-- your WiFi
-const char* WIFI_PASSWORD = "barcelona";    // <-- your password
+const char* WIFI_SSID     = "thezuni-1";       // <-- your WiFi
+const char* WIFI_PASSWORD = "0744804859";    // <-- your password
 
 // ─── Camera pin map for AI Thinker ESP32-CAM ──────────────────────────────────
 #define PWDN_GPIO_NUM     32
